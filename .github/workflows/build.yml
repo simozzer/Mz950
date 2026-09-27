@@ -151,7 +151,7 @@ jobs:
       - name: Keep the build
         uses: actions/upload-artifact@v4
         with:
-          name: VirtualS950-installer
+          name: Mz950-installer
           path: |
             Installer/Output/*.exe
             Installer/Output/SHA256SUMS.txt
@@ -185,9 +185,9 @@ jobs:
 
           ### What it installs
 
-          - **Akai S950 Studio** - open, edit and save S900/S950 disk images (.hfe and .img)
-          - **VirtualS950** - a VST3 that plays those disks in a DAW
-          - **Standalone** - the same instrument without a host
+          - **Mz950 Studio** - open, edit and save S900/S950 disk images (.hfe and .img)
+          - **Mz950** - a VST3 that plays those disks back in a DAW
+          - **Standalone** - the same emulator without a host
           - **A sound library** - five disks of synthesised sounds, so it makes a noise
             without your owning a single floppy
           - **A tutorial**, in the program group and under **Help** in the editor
@@ -199,8 +199,22 @@ jobs:
           AGPLv3. The source for this build is the tag it was made from.
           "@
 
-          gh release create $env:GITHUB_REF_NAME `
-            "Installer/Output/$env:SETUP_NAME" `
-            "Installer/Output/SHA256SUMS.txt" `
-            --title "VirtualS950 $env:GITHUB_REF_NAME" `
-            --notes $notes
+          #
+          # A release made by hand before this step got here - v0.5.0 was - used to fail
+          # the whole run on "already exists" and leave the page with nothing to download.
+          # Now the build is attached to it instead, and the notes written for it are kept.
+          #
+          $PSNativeCommandUseErrorActionPreference = $false
+          $tag    = $env:GITHUB_REF_NAME
+          $title  = "Mz950 $tag"
+          $assets = @("Installer/Output/$env:SETUP_NAME", "Installer/Output/SHA256SUMS.txt")
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+              gh release upload $tag @assets --clobber
+              if ($LASTEXITCODE -ne 0) { exit 1 }
+              gh release edit $tag --title $title
+          } else {
+              gh release create $tag @assets --title $title --notes $notes
+          }
+          exit $LASTEXITCODE
