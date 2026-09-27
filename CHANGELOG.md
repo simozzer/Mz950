@@ -8,6 +8,31 @@ assumption it says that too — those are the ones another afternoon with a reco
 
 ## Unreleased
 
+### The plugin edits programmes: PROGRAM and PERFORM tabs
+
+Every keygroup setting can now be edited in the plugin, as absolute values in the S950's own
+units, and written into the disk image. The window is split into two tabs, so it's always clear
+which controls change the programme (**PROGRAM**, saved in the disk) and which play on top of it
+(**PERFORM**: the offsets, glide, polyphony and Wide, never saved to the disk). Where an offset
+is moving a programme value, the Program tab shows what is actually sounding (**→ 52**).
+
+- **A keygroup strip** across the keyboard, with overlapping keygroups stacked. Click one to
+  edit it, or edit *All keygroups* at once.
+- **Six pages:** Envelopes, Filter, LFO, Velocity, Tuning, Keys & output. That covers all 38
+  settings, with the encodings copied from the Studio's `KeygroupEditor`: signed values, the
+  output port stored one lower, fine tune in 256ths of a semitone, and flags changed one bit at
+  a time.
+- **Edits are saved with the project,** and the host is told the project has changed. Held
+  notes follow an edit, because a rebuilt programme reuses its samples. *Save disk as…* exports
+  a plain `.img`.
+- **One departure from the Studio:** setting a VCF amount on an S900 keygroup with a blank
+  filter envelope writes a flat envelope first. Otherwise the amount would silently do nothing.
+- **Checked:** `DiskEditCheck` (run by `build.ps1`) round-trips every setting on the six test
+  disks, 165,627 checks, and confirms no stray byte changes. `crosscheck.ps1` shows the C# and
+  C++ readers agree on edited images. The engine no longer overwrites a waiting programme when
+  edits arrive fast.
+- **Not yet done:** loading an edited programme on a real S950.
+
 ### Glide (portamento) — new, and not a feature of the S950
 
 The plugin's first control that the machine never had. It is off by default, so nothing about

@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include "PluginProcessor.h"
+#include "ProgramPage.h"
 
 #include <memory>
 #include <vector>
@@ -101,7 +102,8 @@ private:
 };
 
 class VirtualS950Editor : public juce::AudioProcessorEditor,
-                          private juce::Timer
+                          private juce::Timer,
+                          private juce::ChangeListener
 {
 public:
     explicit VirtualS950Editor (VirtualS950Processor&);
@@ -114,6 +116,26 @@ private:
     void timerCallback() override;
 
     VirtualS950Processor& processor;
+
+    /*
+     * THE TWO TABS
+     *
+     * PROGRAM is what is on the disk: every keygroup setting, absolute, saved in the disk.
+     * PERFORM is what you do on top of it: the offsets, glide, polyphony and wide - none of
+     * which is ever written to the disk. They used to share one screen, looking alike, and
+     * nothing said which kind a control was. Now the tab does.
+     */
+    juce::TabbedButtonBar mainTabs { juce::TabbedButtonBar::TabsAtTop };
+    ProgramPage           programPage { processor };
+    juce::Label           performHeading;
+
+    void changeListenerCallback (juce::ChangeBroadcaster*) override { showTab (mainTabs.getCurrentTabIndex()); }
+    void showTab (int tab);
+
+    /// Everything that belongs to the Perform tab, to be shown and hidden together.
+    std::vector<juce::Component*> performParts();
+
+    int seenEditRevision = -1;
 
     /// The processor generation this window last caught up with. See timerCallback.
     int seenGeneration = -1;

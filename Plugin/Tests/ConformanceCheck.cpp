@@ -1629,7 +1629,7 @@ namespace
 
         // As loud as one voice: centred, the pair's power matches a plain note's.
         {
-            auto level = [&] (bool wideOn)
+            auto loudness = [&] (bool wideOn)
             {
                 s950::Engine engine (48000.0);
                 engine.setPatch (patch);
@@ -1644,7 +1644,7 @@ namespace
                 return rms (l);
             };
 
-            const double plain = level (false), wide = level (true);
+            const double plain = loudness (false), wide = loudness (true);
             check (std::fabs (wide - plain) < plain * 0.1, "a wide note is as loud as one",
                    wide, plain);
         }
@@ -1706,6 +1706,22 @@ namespace
 
             check (engine.getActiveVoices() == 1, "a constant-pitch keygroup stays single",
                    engine.getActiveVoices(), 1);
+        }
+
+        // ----------------------------------------------------- handing a patch over
+
+        std::printf ("\n  handing a patch over\n");
+
+        // A second patch is refused until the audio thread has taken the first: writing
+        // `pending` while it might be mid-take was the race. Once taken, it goes.
+        {
+            s950::Engine engine (48000.0);
+            check (engine.trySetPatch (patch), "the first patch is taken", 0, 1);
+            check (! engine.trySetPatch (makePatch (true)), "a second waits for the first", 1, 0);
+
+            run (engine, 32);                          // the audio thread takes it
+            engine.collectRetiredPatch();
+            check (engine.trySetPatch (makePatch (true)), "and then goes", 0, 1);
         }
 
         // Mono across a split: a held key in the other keygroup is no reason for legato.

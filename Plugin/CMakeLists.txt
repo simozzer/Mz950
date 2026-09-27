@@ -78,6 +78,7 @@ juce_add_plugin(VirtualS950
 target_sources(VirtualS950 PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
+    Source/ProgramPage.cpp
     Source/S950/Voice.cpp
     Source/S950/Engine.cpp
     Source/S950/Disk.cpp

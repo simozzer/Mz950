@@ -541,6 +541,7 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
 
         k.slider->setDoubleClickReturnValue (true, 0.0);
         k.slider->setTooltip (tip);
+        k.slider->setTitle (juce::String (w.group) + " " + w.name + " offset");
         k.slider->setTextBoxStyle (juce::Slider::TextBoxBelow, false, 46, 13);
         addAndMakeVisible (*k.slider);
 
@@ -708,6 +709,23 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
     // Whatever the processor is already holding - this editor may well not be the first.
     refreshPrograms();
 
+    // --- the two tabs
+    mainTabs.addTab ("PROGRAM", juce::Colours::transparentBlack, -1);
+    mainTabs.addTab ("PERFORM", juce::Colours::transparentBlack, -1);
+    mainTabs.addChangeListener (this);
+    addAndMakeVisible (mainTabs);
+
+    addChildComponent (programPage);
+
+    performHeading.setText ("PERFORM   -   offsets and extras on top of the programme. Played "
+                            "live and from MIDI CCs; never written to the disk.",
+                            juce::dontSendNotification);
+    performHeading.setColour (juce::Label::textColourId, juce::Colours::grey);
+    addAndMakeVisible (performHeading);
+
+    mainTabs.setCurrentTabIndex (juce::jlimit (0, 1, processor.editorTab), false);
+    showTab (mainTabs.getCurrentTabIndex());
+
     // Big enough to hold the file browser, which opens inside this window rather than as a
     // dialog of its own - see openDisk.
     // 120 taller than it was, for the LFO row: 108 for the knobs and 12 to stand them off
@@ -815,6 +833,39 @@ void VirtualS950Editor::openDisk()
 VirtualS950Editor::~VirtualS950Editor()
 {
     stopTimer();
+    mainTabs.removeChangeListener (this);
+}
+
+std::vector<juce::Component*> VirtualS950Editor::performParts()
+{
+    std::vector<juce::Component*> parts {
+        &performHeading, &vcaEnvelope, &vcfEnvelope,
+        &vcaHeading, &vcfHeading, &sampleHeading, &lfoHeading, &velocityHeading,
+        &glideHeading, &glideButton, &glideTime, &glideTimeLabel,
+        &voiceCount, &voiceCountLabel,
+        &wideHeading, &wideButton, &offsetButton, &wideDetune, &wideDetuneLabel,
+        &wideSpread, &wideSpreadLabel };
+
+    for (auto& k : knobs)
+    {
+        parts.push_back (k.slider.get());
+        parts.push_back (k.label.get());
+    }
+
+    return parts;
+}
+
+void VirtualS950Editor::showTab (int tab)
+{
+    processor.editorTab = tab;
+
+    for (auto* c : performParts())
+        c->setVisible (tab == 1);
+
+    programPage.setVisible (tab == 0);
+
+    if (tab == 0)
+        programPage.refresh();
 }
 
 void VirtualS950Editor::refreshPrograms()
@@ -855,8 +906,27 @@ void VirtualS950Editor::timerCallback()
     {
         seenGeneration = generation;
         refreshPrograms();
+        programPage.refresh();      // a new disk or programme: every keygroup is different
         repaint();                  // the disk name is painted, not a label
     }
+
+    /*
+     * The Program tab re-reads the disk only when something changed it - a new programme,
+     * or an edit - since reading every setting of every keygroup is the one expensive thing
+     * it does. The blue "sounding" readouts follow the Perform offsets every tick: those move
+     * from a controller with no edit at all.
+     */
+    const int edits = processor.getEditRevision();
+
+    if (programPage.isVisible())
+    {
+        if (edits != seenEditRevision)
+            programPage.refresh();
+        else
+            programPage.refreshSounding();
+    }
+
+    seenEditRevision = edits;
 
     const int voices = processor.getActiveVoices();
 
@@ -910,11 +980,13 @@ void VirtualS950Editor::paint (juce::Graphics& g)
      * has now cost three rounds of "it still does not work" on a build that was never the
      * one running. The C# editor carries the same stamp for the same reason.
      */
+    // Bottom left, beside the licence: the top-right corner is gain's, since the header was
+    // rebuilt around the two tabs, and the stamp drawn there ran underneath the knob.
     g.setColour (juce::Colours::darkgrey);
-    g.setFont (juce::FontOptions (11.0f));
-    g.drawText (juce::String (__DATE__) + "  " + __TIME__,
-                16, 18, getWidth() - 32, 18,
-                juce::Justification::centredRight, true);
+    g.setFont (juce::FontOptions (10.0f));
+    g.drawText ("built " + juce::String (__DATE__) + "  " + __TIME__,
+                16, getHeight() - 22, getWidth() / 2, 16,
+                juce::Justification::centredLeft, true);
 
     // The licence asks an interactive program to say so where it can be seen.
     g.setColour (juce::Colours::darkgrey);
@@ -937,16 +1009,43 @@ void VirtualS950Editor::paint (juce::Graphics& g)
 void VirtualS950Editor::resized()
 {
     auto r = getLocalBounds().reduced (16);
-    r.removeFromTop (48);                       // the title painted above
 
-    // Gain stays in its corner. It was there first, and it is the one control that is not
-    // an offset from the disk.
-    auto column = r.removeFromRight (110);
-    auto gainCell = column.removeFromTop (118);
+    /*
+     * The header: the title and disk painted, the disk row, and the two tabs - with gain in
+     * its corner on the right, on both tabs. It was there first, and it is the one control
+     * that is neither the programme nor an offset from it.
+     *
+     * Only the header is narrowed by it. Everything below gets the whole width, which the
+     * Program tab's rows of keygroup controls need.
+     */
+    auto head = r.removeFromTop (118);
+    auto gainCell = head.removeFromRight (110);
     gainLabel.setBounds (gainCell.removeFromBottom (18));
     gain.setBounds (gainCell);
+    head.removeFromRight (16);
 
-    r.removeFromRight (16);
+    head.removeFromTop (48);                    // the title painted above
+    auto row = head.removeFromTop (28);
+    loadButton.setBounds (row.removeFromLeft (110));
+    row.removeFromLeft (8);
+    programs.setBounds (row);
+
+    head.removeFromTop (8);
+    mainTabs.setBounds (head.removeFromTop (30).withWidth (280));
+
+    r.removeFromTop (12);
+
+    // the licence line is painted along the very bottom, and the status line sits above it
+    r.removeFromBottom (14);
+    auto status = r.removeFromBottom (20);
+    patchLabel.setBounds (status.removeFromLeft (status.getWidth() / 3));
+    voicesLabel.setBounds (status);
+    r.removeFromBottom (14);
+
+    programPage.setBounds (r);
+
+    performHeading.setBounds (r.removeFromTop (18));
+    r.removeFromTop (6);
 
     /*
      * An envelope with its heading above it, and - for the filter - its two knobs stacked in
@@ -989,14 +1088,6 @@ void VirtualS950Editor::resized()
 
         envelope.setBounds (area);
     };
-
-    auto row = r.removeFromTop (28);
-    loadButton.setBounds (row.removeFromLeft (110));
-    row.removeFromLeft (8);
-    programs.setBounds (row);
-
-    // the licence line is painted along the very bottom, so leave it its strip
-    r.removeFromBottom (14);
 
     // One row across the bottom holding both, so the space above stays free for whatever
     // comes next.
@@ -1097,8 +1188,4 @@ void VirtualS950Editor::resized()
     voiceCount.setBounds (voicesCell.reduced (1));
     placeRow (lfo,      lfoHeading,      "LFO");
     placeRow (velocity, velocityHeading, "VELOCITY");
-
-    r.removeFromTop (10);
-    patchLabel.setBounds (r.removeFromTop (24));
-    voicesLabel.setBounds (r.removeFromTop (20));
 }

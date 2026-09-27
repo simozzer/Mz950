@@ -85,7 +85,19 @@ namespace s950
          * atomic pointer. Call collectRetiredPatch() from the message thread now and then -
          * a timer, or the top of the next setPatch - or the old patch is never released.
          */
-        void setPatch (PatchPtr patch);
+        void setPatch (PatchPtr patch) { trySetPatch (patch); }
+
+        /*
+         * Hand over a patch if the audio thread has taken the last one - false, touching
+         * nothing, if it has not.
+         *
+         * setPatch used to overwrite `pending` unconditionally, which is a race the moment
+         * the audio thread is taking the previous one at the same instant. A programme change
+         * a minute is never going to hit it; an edit knob dragged at thirty changes a second
+         * will. So a caller that changes the patch often keeps what it wants and tries again
+         * - see VirtualS950Processor::timerCallback - and the newest wins.
+         */
+        bool trySetPatch (const PatchPtr& patch);
 
         /*
          * Release whatever the audio thread has finished with.

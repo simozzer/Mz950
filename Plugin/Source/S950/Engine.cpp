@@ -33,9 +33,14 @@ namespace s950
      * has run is simply held until it has - a programme arriving a few milliseconds late
      * being the whole cost of never freeing on the wrong thread.
      */
-    void Engine::setPatch (PatchPtr patch)
+    bool Engine::trySetPatch (const PatchPtr& patch)
     {
         collectRetiredPatch();          // make room, if the audio thread has handed one back
+
+        // The audio thread has not taken the last one yet: `pending` is still its to take,
+        // and writing it now could land mid-take. Leave it; the caller will try again.
+        if (pendingReady.load (std::memory_order_acquire))
+            return false;
 
         // The shared LFO runs at the rate the programme's keygroups ask for. They almost
         // always agree; where they do not, the first one wins, since one shared oscillator
@@ -54,8 +59,9 @@ namespace s950
         }
 
         sharedStep = step;              // read only by the audio thread; a double write is atomic enough here
-        pending    = std::move (patch);
+        pending    = patch;             // a copy: the caller keeps its own reference
         pendingReady.store (true, std::memory_order_release);
+        return true;
     }
 
     void Engine::collectRetiredPatch()

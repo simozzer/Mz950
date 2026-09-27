@@ -87,6 +87,43 @@ if ($LASTEXITCODE -ne 0) {
     Write-Error "the engine does not match the C# reference - not building a plugin around it"
 }
 
+<#
+    THE DISK WRITER, ON REAL DISKS
+
+    The Program tab writes keygroup settings into the disk image, and DiskEditCheck holds
+    that writer to the reader: every setting of every keygroup, round-tripped, with every
+    byte of the image compared so an edit that touched anything else fails. It needs real
+    disks, which stay out of the repository for the reason crosscheck.ps1 gives - so it runs
+    on whatever is in ..\disks, and says so plainly when there is nothing there.
+#>
+$disks = Join-Path (Split-Path -Parent $root) "disks"
+$images = @(Get-ChildItem $disks -Include *.hfe, *.img -File -Recurse -ErrorAction SilentlyContinue)
+
+if ($images.Count -eq 0) {
+    Write-Host "no disks in $disks - the disk writer was NOT checked" -ForegroundColor DarkYellow
+}
+else {
+    $editCheck = Join-Path $Out "DiskEditCheck.exe"
+    $diskSources = @(
+        (Join-Path $root "Tests\DiskEditCheck.cpp"),
+        (Join-Path $root "Source\S950\Disk.cpp"),
+        (Join-Path $root "Source\S950\Hfe.cpp")
+    )
+    $quotedDisk = ($diskSources | ForEach-Object { "`"$_`"" }) -join " "
+    cmd /c "call `"$vcvars`" >nul 2>&1 && cd /d `"$Out`" && cl /nologo /std:c++17 /EHsc /W4 /O2 /I `"$include`" $quotedDisk /Fe:`"$editCheck`"" | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Error "the disk edit check did not build" }
+
+    Write-Host ""
+    Write-Host "  the disk writer, on $($images.Count) disk(s)"
+    foreach ($img in $images) {
+        $result = & $editCheck $img.FullName | Select-Object -Last 1
+        Write-Host ("  {0,-20} {1}" -f $img.Name, $result.Trim())
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "the disk writer failed on $($img.Name) - not building a plugin around it"
+        }
+    }
+}
+
 if ($NoPlugin) { exit 0 }
 
 # ---------------------------------------------------------------- the plugin itself

@@ -9,17 +9,67 @@
 namespace s950
 {
     /*
+     * Every setting of a keygroup that can be changed in place, one byte each.
+     *
+     * The byte positions and encodings are the C# Studio's (AkaiS950Studio/Editors.cs,
+     * KeygroupEditor), so a disk edited here reads the same there and on the machine:
+     *
+     *   - most are 0..99, stored as they are;
+     *   - velocity to release, warp depth, the VCF amount, and a zone's transpose and
+     *     loudness are signed, -50..+50, in two's complement;
+     *   - the output port is the panel's 0..10 stored one LOWER, so ALL is 0xFF;
+     *   - a zone's fine tune is 0..255, in 256ths of a semitone upward;
+     *   - the four flags are single bits of byte 18, and change one at a time, so the bits
+     *     nobody has decoded yet survive every edit.
+     */
+    enum class KeygroupParam
+    {
+        HighKey, LowKey, VelocitySwitch,
+        VcaAttack, VcaDecay, VcaSustain, VcaRelease,
+        VelToFilter, KeyToFilter, VelToAttack, VelToRelease, VelToLoudness,
+        WarpVelocity, WarpDepth, WarpTime,
+        LfoDelay, LfoRate, LfoDepth, LfoAftertouch, LfoModwheel,
+        OutputPort,
+        VcfAmount, VcfAttack, VcfDecay, VcfSustain, VcfRelease,
+        Zone1Fine, Zone1Transpose, Zone1Filter, Zone1Loudness,
+        Zone2Fine, Zone2Transpose, Zone2Filter, Zone2Loudness,
+        ConstantPitch, LfoDesync, OneShot, VelocityReleaseOn,
+        Count
+    };
+
+    struct KeygroupParamInfo
+    {
+        enum Kind { Unsigned, Signed, Port, Bit };
+
+        const char* name;
+        int  offset;        // within the 70-byte keygroup record
+        int  lo, hi;        // the panel's range, which writing clamps to
+        Kind kind;
+        int  mask;          // Bit only
+    };
+
+    /// Where a setting lives and how it is written. The one table everything reads.
+    const KeygroupParamInfo& keygroupParamInfo (KeygroupParam p);
+
+    /*
      * An 800K Akai S900/S950 floppy: 80 cylinders x 2 heads x 5 sectors of 1024 bytes.
      *
      * Block 0 holds a 64-entry directory at 0x000 and a 16-bit allocation table at 0x600;
      * file data starts at block 4. A file's blocks are a chain through that table rather
      * than a run, so a file is not contiguous and cannot be read as one.
      *
-     * The reading half of AkaiS950List, ported. Nothing here writes: a plugin opens disks
-     * and plays them, and every way of damaging one lives in the editor where a human is
-     * watching. Notably absent for that reason are the rules that make writing dangerous -
-     * that the directory must stay contiguous, and that zone pointers are positions that
-     * have to be recomputed rather than shifted.
+     * The reading half of AkaiS950List, ported - and one narrow kind of writing.
+     *
+     * A keygroup's SETTINGS can be changed where they stand: an envelope time, a filter, an
+     * LFO rate, a key range. Each is one byte at a fixed place in the programme, and changing
+     * its value moves nothing else. That is all this writes. Adding or removing a file, a
+     * keygroup or a sample stays in the Studio, where a human is watching - because that is
+     * where the rules that make writing dangerous live: that the directory must stay
+     * contiguous, and that zone pointers are positions that have to be recomputed rather
+     * than shifted. A value edit touches neither, and setKeygroupParam refuses to write
+     * anywhere but inside one keygroup record of one programme.
+     *
+     * The encodings are the C# Studio's, field for field - see KeygroupParam.
      */
     class Disk
     {
@@ -193,9 +243,53 @@ namespace s950
          * layers. They split the range at the switch, and a switch of 128 leaves zone 1 the
          * whole of it, which is how the panel turns the second zone off.
          */
-        PatchPtr buildPatch (const Entry& program) const;
+        /*
+         * `reuse` is the patch this one replaces, if any. A sample it already holds is taken
+         * from it by name rather than decoded again - which makes rebuilding after a settings
+         * edit cheap, and, more to the point, keeps the SAME sound object: Voice::adopt only
+         * follows a change onto a held note when the sound it is playing is the one it had.
+         * An edit that decoded afresh would leave every held note deaf to it.
+         */
+        PatchPtr buildPatch (const Entry& program, const Patch* reuse = nullptr) const;
+
+        // ------------------------------------------------------------ changing settings
+
+        /*
+         * One keygroup setting, as the panel shows it.
+         *
+         * A filter envelope an S900 left blank - bytes 34 to 37 all spaces - reads as the
+         * flat one the engine gives it, 0/0/99/0, rather than as 32s.
+         */
+        int getKeygroupParam (const Entry& program, int keygroup, KeygroupParam p) const;
+
+        /*
+         * Change one keygroup setting, in place. The value is clamped to the panel's range.
+         *
+         * Writes one byte, or for a blank filter envelope all four of it: the first edit to
+         * any stage writes the flat 0/0/99/0 under the one being set, as the Studio does, so
+         * the envelope becomes a real one rather than three spaces and a number.
+         *
+         * False if nothing could be written - no such keygroup, or the programme's chain
+         * does not reach that far. True otherwise, whether or not the value changed.
+         */
+        bool setKeygroupParam (const Entry& program, int keygroup, KeygroupParam p, int value);
+
+        /// True if an S900 left this keygroup's filter envelope blank.
+        bool vcfBlank (const Entry& program, int keygroup) const;
+
+        /// Bumped by every write, so a caller can tell a disk has changed since it looked.
+        int getRevision() const { return revision; }
+
+        /// Where byte `offset` of keygroup `keygroup` is in the image. False if nowhere.
+        /// Public so a check can say exactly which bytes an edit was allowed to touch.
+        bool keygroupByteAt (const Entry& program, int keygroup, int offset, std::size_t& at) const;
 
     private:
+        /// Byte `offset` of a file, through its chain. False past the end of the file.
+        bool fileByteAt (const Entry& e, int offset, std::size_t& at) const;
+
+        int revision = 0;
+
         int  fat (int block) const;
         std::vector<int> chain (int start) const;
         void parseDirectory();

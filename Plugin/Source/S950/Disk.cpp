@@ -184,6 +184,184 @@ namespace s950
         return nullptr;
     }
 
+    // ------------------------------------------------------------ changing settings
+
+    const KeygroupParamInfo& keygroupParamInfo (KeygroupParam p)
+    {
+        using K = KeygroupParamInfo;
+
+        // In the order of the enum. The ranges and kinds are the Studio's KeygroupEditor.
+        static const KeygroupParamInfo table[] =
+        {
+            { "High key",            0,   0, 127, K::Unsigned, 0 },
+            { "Low key",             1,   0, 127, K::Unsigned, 0 },
+            { "Velocity switch",     2,   1, 128, K::Unsigned, 0 },
+            { "VCA attack",          3,   0,  99, K::Unsigned, 0 },
+            { "VCA decay",           4,   0,  99, K::Unsigned, 0 },
+            { "VCA sustain",         5,   0,  99, K::Unsigned, 0 },
+            { "VCA release",         6,   0,  99, K::Unsigned, 0 },
+            { "Velocity to filter",  7,   0,  99, K::Unsigned, 0 },
+            { "Key to filter",       8,   0,  99, K::Unsigned, 0 },
+            { "Velocity to attack",  9,   0,  99, K::Unsigned, 0 },
+            { "Velocity to release", 10, -50, 50, K::Signed,   0 },
+            { "Velocity to loudness",11,  0,  99, K::Unsigned, 0 },
+            { "Warp velocity",       12,  0,  99, K::Unsigned, 0 },
+            { "Warp depth",          13, -50, 50, K::Signed,   0 },
+            { "Warp time",           14,  0,  99, K::Unsigned, 0 },
+            { "LFO delay",           15,  0,  99, K::Unsigned, 0 },
+            { "LFO rate",            16,  0,  99, K::Unsigned, 0 },
+            { "LFO depth",           17,  0,  99, K::Unsigned, 0 },
+            { "LFO from aftertouch", 21,  0,  50, K::Unsigned, 0 },
+            { "LFO from modwheel",   22,  0,  50, K::Unsigned, 0 },
+            { "Output",              19,  0,  10, K::Port,     0 },
+            { "VCF amount",          23, -50, 50, K::Signed,   0 },
+            { "VCF attack",          34,  0,  99, K::Unsigned, 0 },
+            { "VCF decay",           35,  0,  99, K::Unsigned, 0 },
+            { "VCF sustain",         36,  0,  99, K::Unsigned, 0 },
+            { "VCF release",         37,  0,  99, K::Unsigned, 0 },
+            { "Soft fine",           42,  0, 255, K::Unsigned, 0 },
+            { "Soft transpose",      43, -50, 50, K::Signed,   0 },
+            { "Soft filter",         44,  0,  99, K::Unsigned, 0 },
+            { "Soft loudness",       45, -50, 50, K::Signed,   0 },
+            { "Loud fine",           64,  0, 255, K::Unsigned, 0 },
+            { "Loud transpose",      65, -50, 50, K::Signed,   0 },
+            { "Loud filter",         66,  0,  99, K::Unsigned, 0 },
+            { "Loud loudness",       67, -50, 50, K::Signed,   0 },
+            { "Constant pitch",      18,  0,   1, K::Bit,      0x01 },
+            { "LFO desync",          18,  0,   1, K::Bit,      0x04 },
+            { "One shot",            18,  0,   1, K::Bit,      0x08 },
+            { "Velocity release on", 18,  0,   1, K::Bit,      0x10 },
+        };
+
+        static_assert (sizeof (table) / sizeof (table[0])
+                           == static_cast<std::size_t> (KeygroupParam::Count),
+                       "one row per KeygroupParam, in order");
+
+        return table[static_cast<int> (p)];
+    }
+
+    bool Disk::fileByteAt (const Entry& e, int offset, std::size_t& at) const
+    {
+        if (offset < 0 || offset >= e.length)
+            return false;
+
+        const auto blocks = chain (e.startBlock);
+        const auto bi = static_cast<std::size_t> (offset / BlockSize);
+
+        if (bi >= blocks.size())
+            return false;
+
+        at = static_cast<std::size_t> (blocks[bi]) * BlockSize
+           + static_cast<std::size_t> (offset % BlockSize);
+
+        return at < image.size();
+    }
+
+    /*
+     * Mapped one byte at a time, never as a run: a programme is chained through the
+     * allocation table, and a 70-byte keygroup can straddle the end of one block and the
+     * start of another that is nowhere near it.
+     */
+    bool Disk::keygroupByteAt (const Entry& program, int keygroup, int offset, std::size_t& at) const
+    {
+        if (program.type != 'P' || offset < 0 || offset >= KeygroupSize)
+            return false;
+
+        if (keygroup < 0 || keygroup >= keygroupCount (program))
+            return false;
+
+        return fileByteAt (program, ProgHeaderSize + keygroup * KeygroupSize + offset, at);
+    }
+
+    bool Disk::vcfBlank (const Entry& program, int keygroup) const
+    {
+        for (int o = 34; o <= 37; ++o)
+        {
+            std::size_t at = 0;
+            if (! keygroupByteAt (program, keygroup, o, at) || image[at] != 0x20)
+                return false;
+        }
+
+        return true;
+    }
+
+    int Disk::getKeygroupParam (const Entry& program, int keygroup, KeygroupParam p) const
+    {
+        const auto& info = keygroupParamInfo (p);
+
+        if (p == KeygroupParam::VcfAttack || p == KeygroupParam::VcfDecay
+            || p == KeygroupParam::VcfSustain || p == KeygroupParam::VcfRelease)
+        {
+            if (vcfBlank (program, keygroup))
+                return p == KeygroupParam::VcfSustain ? 99 : 0;
+        }
+
+        std::size_t at = 0;
+        if (! keygroupByteAt (program, keygroup, info.offset, at))
+            return 0;
+
+        const unsigned char b = image[at];
+
+        switch (info.kind)
+        {
+            case KeygroupParamInfo::Signed: return static_cast<signed char> (b);
+            case KeygroupParamInfo::Port:   return b == 0xFF ? 0 : b + 1;
+            case KeygroupParamInfo::Bit:    return (b & info.mask) != 0 ? 1 : 0;
+            default:                        return b;
+        }
+    }
+
+    bool Disk::setKeygroupParam (const Entry& program, int keygroup, KeygroupParam p, int value)
+    {
+        const auto& info = keygroupParamInfo (p);
+
+        std::size_t at = 0;
+        if (! keygroupByteAt (program, keygroup, info.offset, at))
+            return false;
+
+        const int v = value < info.lo ? info.lo : (value > info.hi ? info.hi : value);
+
+        // A blank S900 filter envelope becomes the flat one first, as the Studio does it.
+        if ((p == KeygroupParam::VcfAttack || p == KeygroupParam::VcfDecay
+             || p == KeygroupParam::VcfSustain || p == KeygroupParam::VcfRelease)
+            && vcfBlank (program, keygroup))
+        {
+            const unsigned char flat[] = { 0, 0, 99, 0 };
+
+            for (int o = 0; o < 4; ++o)
+            {
+                std::size_t stage = 0;
+                if (keygroupByteAt (program, keygroup, 34 + o, stage))
+                    image[stage] = flat[o];
+            }
+        }
+
+        unsigned char b = image[at];
+
+        switch (info.kind)
+        {
+            case KeygroupParamInfo::Signed:
+                b = static_cast<unsigned char> (static_cast<signed char> (v));
+                break;
+
+            case KeygroupParamInfo::Port:
+                b = static_cast<unsigned char> (v == 0 ? 0xFF : v - 1);
+                break;
+
+            case KeygroupParamInfo::Bit:
+                b = static_cast<unsigned char> (v != 0 ? (b | info.mask) : (b & ~info.mask));
+                break;
+
+            default:
+                b = static_cast<unsigned char> (v);
+                break;
+        }
+
+        image[at] = b;
+        ++revision;
+        return true;
+    }
+
     // ------------------------------------------------------------------------ reading
 
     std::vector<unsigned char> Disk::readFile (const Entry& e) const
@@ -362,7 +540,7 @@ namespace s950
         return s;
     }
 
-    PatchPtr Disk::buildPatch (const Entry& program) const
+    PatchPtr Disk::buildPatch (const Entry& program, const Patch* reuse) const
     {
         if (program.type != 'P') return nullptr;
 
@@ -387,6 +565,14 @@ namespace s950
             for (const auto& d : decoded)
                 if (d.first == name)
                     return d.second;
+
+            if (reuse != nullptr)
+                for (const auto& k : reuse->keygroups)
+                    if (k.sound != nullptr && k.sound->name == name)
+                    {
+                        decoded.emplace_back (name, k.sound);
+                        return k.sound;
+                    }
 
             const Entry* e = find (name, 'S');
             SoundPtr s = e != nullptr ? soundFor (*e) : nullptr;

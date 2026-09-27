@@ -140,7 +140,59 @@ public:
      */
     int getDiskGeneration() const { return diskGeneration.load (std::memory_order_relaxed); }
 
+    // --------------------------------------------------------- editing the programme
+
+    /*
+     * The loaded programme's keygroups, read and changed in place on the disk image.
+     *
+     * Absolute values in the panel's own units - the PROGRAM half of the window - as
+     * against the trims, which are offsets and never touch the disk. An edit is written into
+     * the image the plugin holds, so it is saved with the host's project like everything
+     * else about the disk, and goes out with it when the disk is saved as a file.
+     *
+     * `keygroup` is 0-based; -1 means every keygroup of the programme at once. All of this is
+     * message thread only. Nothing here is available with no disk loaded: the placeholder
+     * saw is not on a disk and has nowhere to write to.
+     */
+    int  getKeygroupCount() const;
+    int  getKeygroupValue (int keygroup, s950::KeygroupParam p) const;
+    void setKeygroupValue (int keygroup, s950::KeygroupParam p, int value);
+
+    /// An S900 programme's filter envelope, left as four spaces. See Disk::vcfBlank.
+    bool isVcfBlank (int keygroup) const;
+
+    /// The sample a keygroup's zone plays - 1 soft, 2 loud - or an empty string.
+    juce::String getZoneSample (int keygroup, int zone) const;
+
+    /// Bumped by every edit, so the window can redraw what it shows.
+    int getEditRevision() const { return editRevision; }
+
+    /// Which tab the window last showed - 0 Program, 1 Perform - so reopening it, which a
+    /// host does every time the window is closed, comes back where it was. Not saved.
+    int editorTab = 0;
+
+    /*
+     * The disk as it now stands, edits and all, written as a plain sector image - which is
+     * what a Gotek or an HxC emulator, the Studio, and this plugin all open.
+     */
+    bool saveDiskAs (const juce::File& file, juce::String& error) const;
+
 private:
+    /// The directory entry of the programme that is playing, or nullptr.
+    const s950::Disk::Entry* selectedEntry() const;
+
+    /*
+     * Give the engine `patch`, now or on a later timer tick.
+     *
+     * The engine refuses while it has not yet taken the last one - see
+     * Engine::trySetPatch - so this remembers that one is owed and the timer pays it. The
+     * newest patch is always the one handed over, so a burst of edits costs one exchange.
+     */
+    void sendPatch();
+    bool patchOwed = false;
+
+    int editRevision = 0;
+
     void timerCallback() override;
 
     static juce::AudioProcessorValueTreeState::ParameterLayout describeParameters();

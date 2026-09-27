@@ -403,7 +403,10 @@ VirtualS950Processor::VirtualS950Processor()
      * The engine hands a replaced programme back to be freed, and it must be freed on this
      * thread rather than in the audio callback. Nothing else would ever ask.
      */
-    startTimer (500);
+    // Thirty times a second: often enough that an edit owed to the engine (see sendPatch)
+    // is heard while the knob is still moving. Everything the timer does is a compare when
+    // there is nothing to do.
+    startTimer (33);
 }
 
 VirtualS950Processor::~VirtualS950Processor()
@@ -415,6 +418,9 @@ void VirtualS950Processor::timerCallback()
 {
     if (engine != nullptr)
         engine->collectRetiredPatch();
+
+    if (patchOwed)
+        sendPatch();
 
     /*
      * The host chose one of the empty slots. Saying what is current instead puts its chooser
@@ -606,14 +612,14 @@ void VirtualS950Processor::processBlock (juce::AudioBuffer<float>& buffer,
          */
         else if (m.isController() && m.getControllerNumber() == 106)
         {
-            const int count = 1 + m.getControllerValue() * s950::Engine::Polyphony / 128;
+            const int notes = 1 + m.getControllerValue() * s950::Engine::Polyphony / 128;
 
-            engine->setVoiceLimit (count, at);
-            voicesPosted = count;
+            engine->setVoiceLimit (notes, at);
+            voicesPosted = notes;
 
             if (voicesControl != nullptr)
             {
-                const float normalised = voicesControl->convertTo0to1 (static_cast<float> (count));
+                const float normalised = voicesControl->convertTo0to1 (static_cast<float> (notes));
 
                 if (voicesControl->getValue() != normalised)
                     voicesControl->setValueNotifyingHost (normalised);
@@ -997,9 +1003,7 @@ void VirtualS950Processor::selectProgram (int index)
 
     selectedProgram = index;
     patch = built;
-
-    if (engine != nullptr)
-        engine->setPatch (patch);
+    sendPatch();
 
     diskGeneration.fetch_add (1, std::memory_order_relaxed);
 
@@ -1014,6 +1018,128 @@ void VirtualS950Processor::selectProgram (int index)
      */
     if (! hostIsChoosing)
         updateHostDisplay (juce::AudioProcessorListener::ChangeDetails {}.withProgramChanged (true));
+}
+
+// ---------------------------------------------------------- editing the programme
+
+void VirtualS950Processor::sendPatch()
+{
+    // No engine yet is not a debt: prepareToPlay hands the current patch to the one it builds.
+    if (engine == nullptr)
+    {
+        patchOwed = false;
+        return;
+    }
+
+    patchOwed = ! engine->trySetPatch (patch);
+}
+
+const s950::Disk::Entry* VirtualS950Processor::selectedEntry() const
+{
+    if (disk == nullptr || selectedProgram < 0)
+        return nullptr;
+
+    int seen = 0;
+    for (const auto& e : disk->getEntries())
+    {
+        if (e.type != 'P') continue;
+        if (seen++ == selectedProgram) return &e;
+    }
+
+    return nullptr;
+}
+
+int VirtualS950Processor::getKeygroupCount() const
+{
+    const auto* entry = selectedEntry();
+    return entry != nullptr ? s950::Disk::keygroupCount (*entry) : 0;
+}
+
+int VirtualS950Processor::getKeygroupValue (int keygroup, s950::KeygroupParam p) const
+{
+    const auto* entry = selectedEntry();
+    return entry != nullptr ? disk->getKeygroupParam (*entry, keygroup, p) : 0;
+}
+
+bool VirtualS950Processor::isVcfBlank (int keygroup) const
+{
+    const auto* entry = selectedEntry();
+    return entry != nullptr && disk->vcfBlank (*entry, keygroup);
+}
+
+juce::String VirtualS950Processor::getZoneSample (int keygroup, int zone) const
+{
+    const auto* entry = selectedEntry();
+    if (entry == nullptr) return {};
+
+    const auto groups = disk->keygroups (*entry);
+    if (! juce::isPositiveAndBelow (keygroup, (int) groups.size())) return {};
+
+    const auto& z = zone == 2 ? groups[(size_t) keygroup].zone2 : groups[(size_t) keygroup].zone1;
+    return z.inUse() ? juce::String (z.name) : juce::String();
+}
+
+void VirtualS950Processor::setKeygroupValue (int keygroup, s950::KeygroupParam p, int value)
+{
+    const auto* entry = selectedEntry();
+    if (entry == nullptr) return;
+
+    const int count = s950::Disk::keygroupCount (*entry);
+    const int from  = keygroup < 0 ? 0 : keygroup;
+    const int to    = keygroup < 0 ? count : juce::jmin (keygroup + 1, count);
+
+    for (int k = from; k < to; ++k)
+    {
+        /*
+         * The one place this parts from the Studio. An S900 programme with a blank filter
+         * envelope ignores its VCF amount - there is no envelope for the amount to scale - so
+         * an amount dialled in here would do nothing at all, silently. Writing the flat
+         * 0/0/99/0 under it first gives the amount something to act on, which is what turning
+         * that knob plainly asks for. The Studio leaves the envelope blank in this case.
+         */
+        if (p == s950::KeygroupParam::VcfAmount && disk->vcfBlank (*entry, k))
+            disk->setKeygroupParam (*entry, k, s950::KeygroupParam::VcfSustain, 99);
+
+        disk->setKeygroupParam (*entry, k, p, value);
+    }
+
+    /*
+     * Rebuilt from the disk rather than patched in memory, so what plays is always exactly
+     * what a reload would give - there is one route from bytes to sound, not two that could
+     * drift. Reusing the current patch's samples keeps it cheap and keeps held notes
+     * following the edit; see Disk::buildPatch.
+     */
+    auto rebuilt = disk->buildPatch (*entry, patch.get());
+    if (rebuilt != nullptr && ! rebuilt->keygroups.empty())
+    {
+        patch = rebuilt;
+        sendPatch();
+    }
+
+    ++editRevision;
+
+    /*
+     * Tell the host the project has changed. An edit moves no parameter - it changes the
+     * disk, which the host only ever sees as a blob at save time - so without this Live
+     * would close a set with an edited programme in it and never ask whether to save. The
+     * VST3 wrapper turns this into its "mark dirty" flag and nothing else.
+     */
+    updateHostDisplay (juce::AudioProcessorListener::ChangeDetails {}.withNonParameterStateChanged (true));
+}
+
+bool VirtualS950Processor::saveDiskAs (const juce::File& file, juce::String& error) const
+{
+    if (disk == nullptr) { error = "no disk is loaded"; return false; }
+
+    const auto& image = disk->getImage();
+
+    if (! file.replaceWithData (image.data(), image.size()))
+    {
+        error = "could not write " + file.getFullPathName();
+        return false;
+    }
+
+    return true;
 }
 
 // ------------------------------------------------------------------- for the editor

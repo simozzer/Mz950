@@ -25,6 +25,27 @@ that can never lose the sound it was made with. Move the image, rename it, or op
 on another machine — it still plays. The programme comes back by name first and by position
 second, so a disk edited and reordered since still returns what you meant.
 
+**Two tabs: PROGRAM and PERFORM.** They separate the two kinds of control, which used to sit
+side by side looking alike.
+
+- **PROGRAM is what's on the disk.** Every setting of every keygroup, as absolute values in the
+  S950's own units and ranges, so it reads like the machine's front panel. A strip across the
+  keyboard shows the keygroups (overlapping ones stacked); click one to edit it, or choose
+  *All keygroups*. Six small pages hold the settings: Envelopes, Filter, LFO, Velocity, Tuning,
+  and Keys & output. An edit is written into the plugin's copy of the disk image, so it's saved
+  with the project (Live asks to save after an edit) and held notes follow it as you turn the
+  knob. *Save disk as…* writes the edited disk as a plain `.img` for the Studio, this plugin, or
+  a Gotek or HxC floppy emulator. When a Perform offset is moving a setting, the control shows
+  what is actually sounding underneath it in blue, e.g. **→ 52**.
+- **PERFORM is what you do on top of it:** the offsets below, plus glide, polyphony and Wide.
+  None of these is ever written to the disk.
+
+Program edits change only the values of existing settings, one byte each. They never add or
+remove keygroups, samples or files, which stays in the Studio. `Tests/DiskEditCheck.cpp`, run
+by `build.ps1` on every disk in `disks/`, round-trips every setting and checks that no other
+byte of the image moves. `crosscheck.ps1` on an edited image confirms the C# Studio reads it
+identically. **An edited programme has not yet been loaded on a real S950.**
+
 **The player's controls.** Sixteen parameters, all automatable by the host and all reachable
 from a MIDI controller: gain, and fifteen trims that move every keygroup of the loaded
 programme together.
