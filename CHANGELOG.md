@@ -6,7 +6,9 @@ Every number here came off a recording of a real S950 rather than out of a manua
 a change is a measurement it says what was measured and what it replaced. Where it is an
 assumption it says that too — those are the ones another afternoon with a recorder settles.
 
-## Unreleased
+## v0.5.1 — 2026-09-27
+
+High-density disks, and 48 kHz samples kept at 48 kHz on import.
 
 ### High-density disks
 
