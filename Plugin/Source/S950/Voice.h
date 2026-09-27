@@ -63,9 +63,27 @@ namespace s950
         /// `crossfade` is the positional crossfade's gain for this keygroup at this key,
         /// worked out once by the engine from every keygroup answering the note. See
         /// cal::crossfadeGain.
+        ///
+        /// `glideSemis` is how far from this note the pitch starts, in semitones, and
+        /// `glideSeconds` how long it takes to arrive. Zero for either is no glide. See
+        /// Engine::glide - it is not something the S950 had.
         void start (const KeygroupPatch& kg, int note, int velocity,
                     double sampleRate, double wheelCents, long long sequence,
-                    double crossfade = 1.0);
+                    double crossfade = 1.0,
+                    double glideSemis = 0.0, double glideSeconds = 0.0);
+
+        /*
+         * The pitch this voice is sounding at, as a note number with a fraction.
+         *
+         * The key it was struck on plus however much glide it has left to cover, so a note
+         * struck in the middle of a glide can start from where the last one had got to rather
+         * than from where it was going. Ignores the wheel, the LFO and warp: those move every
+         * note alike and a glide should not inherit them.
+         */
+        double getPitchNow() const { return note + glideOffset; }
+
+        /// Still sliding towards its note. False once it arrives, or once release() stops it.
+        bool isGliding() const { return glidePerSecond > 0.0 && glideOffset != 0.0; }
 
         /*
          * Take up new settings without restarting the note.
@@ -82,6 +100,16 @@ namespace s950
          * audio. That waits for the next trigger.
          */
         void adopt (const KeygroupPatch& kg);
+
+        /*
+         * Move a sounding note to another key without striking it again - mono legato.
+         *
+         * The sample carries on from where it is and the envelope stays in its stage; only
+         * the pitch moves, gliding there if `glideSemis` and `glideSeconds` say so, exactly
+         * as start() would have. Velocity is the first strike's: the note was never struck
+         * again. Same keygroup and same sample only - Engine::startNote checks.
+         */
+        void legatoTo (int note, double glideSemis, double glideSeconds);
 
         /*
          * The player's own trims, on top of whatever the keygroup says.
@@ -103,6 +131,41 @@ namespace s950
         void release();
 
         void kill() { stage = Stage::idle; }
+
+        /*
+         * A released note that a glide is taking over: fade it out fast.
+         *
+         * Without this, a glide from a note whose key is already up started a SECOND voice at
+         * that note's pitch while the first was still in its release - two copies of one
+         * sample at nearly one pitch, drifting apart, which is a unison. It was heard as the
+         * sound thickening on a line of single notes, and only with polyphony above one,
+         * because mono takes its one voice over anyway. The glide is the old note carrying
+         * on; the old note's own tail should go.
+         *
+         * Ten milliseconds rather than cut dead, which would click. Only for a voice already
+         * in its release: a key still held is being played, and is left alone.
+         */
+        void handOver();
+
+        /*
+         * WIDE - one half of a detuned pair. Not an S950 feature; see Engine::wide.
+         *
+         * `sign` is -1 for the flat half, which leans left, and +1 for the sharp half, which
+         * leans right. Called straight after start(). With `offset` the sharp half starts a
+         * few milliseconds into the sample, so the two are not in phase at the attack - two
+         * copies starting together flange until they drift apart.
+         */
+        void makeWide (int sign, int partnerIndex, bool offset);
+
+        /// The other half of this voice's pair, or -1. Only to be trusted if it points back.
+        int getPartner() const { return partner; }
+
+        /*
+         * How far apart the pair sits and how wide, set by the engine before each stretch
+         * so turning either control is heard on notes already sounding. Ignored by a voice
+         * that is not half of a pair.
+         */
+        void setWide (double cents, double spread);
 
         /*
          * Add this voice into the buffer.
@@ -306,5 +369,37 @@ namespace s950
         double outL = 1.0, outR = 1.0;
         double wheelCents  = 0.0;    // kept so adopt() can add it back to a new depth
         bool   ownLfo = true;
+
+        /*
+         * Portamento: semitones still to travel, and how fast, in semitones a second.
+         *
+         * The offset walks to zero in a straight line in SEMITONES - an exponential in hertz -
+         * so an octave glide spends as long on its bottom half as its top, which is what
+         * every synth with a portamento knob does and what an ear hears as even.
+         *
+         * The speed is set at the strike from the distance and the time, so every glide takes
+         * the same time however far it goes. Constant-rate is the other school; constant-time
+         * is the one where a knob reading 200 ms means 200 ms.
+         */
+        double glideOffset = 0.0, glidePerSecond = 0.0;
+
+        /// Handed over to a glide: the release is held to HandOverRelease. See handOver().
+        bool handedOver = false;
+
+        /*
+         * Wide: which half of a pair this is (0 for not one), its twin, and what the detune
+         * and the spread come to as a rate multiplier and two channel gains.
+         *
+         * The gains are an equal-power pan with both halves at -3 dB. Centred, each half is
+         * 0.707 in both channels, and two copies that are not in phase add up in power to
+         * one note's worth. Fully spread, each half is at 1.0 on its own side - so a wide
+         * note is as loud as a plain one wherever the Spread control sits.
+         */
+        int    wideSign = 0, partner = -1;
+        double wideRatio = 1.0, wideGainL = 1.0, wideGainR = 1.0;
+
+        /// A release time that falls the whole way (-74 dB, where render() stops a voice) in
+        /// 10 ms, given that a release time is the time to fall cal::VcaReleaseDb.
+        static constexpr double HandOverRelease = 0.010 * cal::VcaReleaseDb / 74.0;
     };
 }

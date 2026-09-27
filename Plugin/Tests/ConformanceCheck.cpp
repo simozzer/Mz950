@@ -1243,6 +1243,502 @@ namespace
         check (std::fabs (quickDecay - slowDecay) < quickDecay * 0.02,
                "the amplitude decay does not restart the filter", slowDecay, quickDecay);
     }
+
+    // --------------------------------------------------------------------- glide
+
+    /// The pitch the newest voice on `note` is sounding at, or -1.
+    double pitchOf (const s950::Engine& engine, int note)
+    {
+        const s950::Voice* newest = nullptr;
+
+        for (int i = 0; i < s950::Engine::Polyphony; ++i)
+        {
+            const auto& v = engine.getVoice (i);
+            if (v.isActive() && v.getNote() == note
+                && (newest == nullptr || v.getStartedAt() > newest->getStartedAt()))
+                newest = &v;
+        }
+
+        return newest != nullptr ? newest->getPitchNow() : -1.0;
+    }
+
+    /// Cycles of the saw in a stretch of output: it climbs through zero once a cycle.
+    int upwardCrossings (const std::vector<float>& x)
+    {
+        int n = 0;
+        for (size_t i = 1; i < x.size(); ++i)
+            if (x[i - 1] < 0.0f && x[i] >= 0.0f) ++n;
+
+        return n;
+    }
+
+    /*
+     * Portamento, which is not the machine's and so has no C# number to agree with. These
+     * pin down what it was built to do instead - and, first, that switched off it changes
+     * nothing, which every check above already shows by passing untouched.
+     */
+    void checkGlide()
+    {
+        std::printf ("\n  glide\n");
+
+        auto makePatch = [] (bool constantPitch)
+        {
+            auto p = std::make_shared<s950::Patch>();
+            s950::KeygroupPatch kg;
+            kg.keygroupIndex = 0;
+            kg.sound         = makeSaw (48000, 48000);     // 480 Hz at note 60
+            kg.zoneFilter    = 99;
+            kg.vcaSustain    = 99;
+            kg.constantPitch = constantPitch;
+            p->keygroups.push_back (kg);
+            return p;
+        };
+
+        auto patch = makePatch (false);
+        std::vector<float> buffer;
+
+        auto run = [&buffer] (s950::Engine& e, int samples)
+        {
+            buffer.assign (static_cast<size_t> (samples), 0.0f);
+            e.render (buffer.data(), samples);
+        };
+
+        // Off: the second note is where it was struck at once.
+        {
+            s950::Engine engine (48000.0);
+            engine.setPatch (patch);
+            engine.noteOn (48, 127);
+            run (engine, 4800);
+            engine.noteOn (60, 127);
+            run (engine, 32);
+            same ("off: no glide", pitchOf (engine, 60), 60.0, 1e-12);
+        }
+
+        // On, 100 ms: halfway at 50, arrived by 100, and the first note has nowhere to come from.
+        {
+            s950::Engine engine (48000.0);
+            engine.glideSeconds.store (0.1);
+            engine.setPatch (patch);
+            engine.glide (true);
+
+            engine.noteOn (48, 127);
+            run (engine, 32);
+            same ("the first note does not glide", pitchOf (engine, 48), 48.0, 1e-12);
+
+            run (engine, 4800);
+            engine.noteOn (60, 127);
+            run (engine, 2400);
+            same ("halfway there at half the time", pitchOf (engine, 60), 54.0, 0.1);
+
+            run (engine, 2432);
+            same ("arrived by the glide time", pitchOf (engine, 60), 60.0, 1e-12);
+        }
+
+        // The audio, not only the bookkeeping: the first 50 ms of a glide up from an octave
+        // below sound about three quarters as many cycles as the note held level.
+        auto cyclesIn50ms = [&] (bool glideOn, const s950::PatchPtr& p)
+        {
+            s950::Engine engine (48000.0);
+            engine.glideSeconds.store (0.1);
+            engine.setPatch (p);
+            engine.glide (glideOn);
+            engine.noteOn (48, 127);
+            run (engine, 4800);
+            engine.noteOff (48);
+            engine.noteOn (60, 127);
+            run (engine, 2400);
+            return upwardCrossings (buffer);
+        };
+
+        const int level  = cyclesIn50ms (false, patch);
+        const int glided = cyclesIn50ms (true,  patch);
+
+        // Straight in semitones from 48 to 54 over the window: 240 * 2^(u/2) Hz averaged over
+        // u in 0..1 is 240 * (sqrt 2 - 1) / (ln 2 / 2) = 287 Hz, or 0.60 of 480.
+        check (glided <= level * 0.7 && glided >= level * 0.5,
+               "a glide is heard coming up to pitch", glided, level * 0.6);
+
+        // A constant-pitch keygroup ignores the key, and so the glide between keys.
+        auto drum = makePatch (true);
+        check (cyclesIn50ms (true, drum) == cyclesIn50ms (false, drum),
+               "a constant-pitch keygroup does not glide",
+               cyclesIn50ms (true, drum), cyclesIn50ms (false, drum));
+
+        // Struck mid-glide: the new note starts from where the last had got to.
+        {
+            s950::Engine engine (48000.0);
+            engine.glideSeconds.store (0.2);
+            engine.setPatch (patch);
+            engine.glide (true);
+
+            engine.noteOn (48, 127);
+            run (engine, 4800);
+            engine.noteOn (72, 127);
+            run (engine, 4800);                            // halfway: about 60
+
+            const double reached = pitchOf (engine, 72);
+            engine.noteOn (66, 127);
+            run (engine, 32);
+
+            same ("a glide carries on from where the last one got to",
+                  pitchOf (engine, 66) + (66.0 - reached) * (32.0 / 9600.0),
+                  reached, 0.05);
+        }
+
+        // Only inside a keygroup. On a split, crossing into the other half is a different
+        // sample and a different instrument, and must not slide; within it, it does.
+        {
+            auto split = std::make_shared<s950::Patch>();
+
+            for (int k = 0; k < 2; ++k)
+            {
+                s950::KeygroupPatch kg;
+                kg.keygroupIndex = k;
+                kg.lowKey        = k == 0 ? 0  : 60;
+                kg.highKey       = k == 0 ? 59 : 127;
+                kg.sound         = makeSaw (48000, 48000);
+                kg.zoneFilter    = 99;
+                split->keygroups.push_back (kg);
+            }
+
+            s950::Engine engine (48000.0);
+            engine.glideSeconds.store (0.1);
+            engine.setPatch (split);
+            engine.glide (true);
+
+            engine.noteOn (48, 127);
+            run (engine, 4800);
+            engine.noteOn (72, 127);
+            run (engine, 32);
+            same ("across keygroups: no glide", pitchOf (engine, 72), 72.0, 1e-12);
+
+            run (engine, 4800);
+            engine.noteOn (67, 127);
+            run (engine, 32);
+            check (pitchOf (engine, 67) > 71.0, "within one: it glides",
+                   pitchOf (engine, 67), 72.0);
+
+            engine.noteOn (50, 127);
+            run (engine, 32);
+            check (pitchOf (engine, 50) < 49.0, "and the other half remembers its own",
+                   pitchOf (engine, 50), 48.0);
+        }
+
+        /*
+         * Let go mid-glide: the slide stops where it stands, and the next note plays at its
+         * own pitch. A release long enough to keep the voice sounding, so there is a pitch
+         * left to look at.
+         */
+        {
+            auto ringing = makePatch (false);
+            ringing->keygroups[0].vcaRelease = 60;
+
+            s950::Engine engine (48000.0);
+            engine.glideSeconds.store (0.1);
+            engine.setPatch (ringing);
+            engine.glide (true);
+
+            engine.noteOn (48, 127);
+            run (engine, 4800);
+            engine.noteOn (60, 127);
+            run (engine, 2400);                            // about 54
+
+            const double reached = pitchOf (engine, 60);
+            engine.noteOff (60);
+            run (engine, 2400);
+            same ("let go mid-glide: it stops there", pitchOf (engine, 60), reached, 1e-12);
+
+            engine.noteOn (66, 127);
+            run (engine, 32);
+            same ("and the next note is at its own pitch", pitchOf (engine, 66), 66.0, 1e-12);
+
+            // Let go AFTER arriving: a finished note, and the next one still slides from it.
+            run (engine, 9600);
+            engine.noteOff (66);
+            engine.noteOn (72, 127);
+            run (engine, 32);
+            check (pitchOf (engine, 72) < 71.0, "a glide that had arrived still leads on",
+                   pitchOf (engine, 72), 66.0);
+        }
+
+        // The switch lands on its own sample, either side of a note in the same block. Posted
+        // in time order, which is how a host hands a block's messages over.
+        auto glidesWhenSwitchedAt = [&] (int switchAt)
+        {
+            s950::Engine engine (48000.0);
+            engine.glideSeconds.store (0.1);
+            engine.setPatch (patch);
+            engine.glide (true);
+            engine.noteOn (48, 127);
+            run (engine, 4800);
+
+            if (switchAt < 200) engine.glide (false, switchAt);
+            engine.noteOn (60, 127, 200);
+            if (switchAt >= 200) engine.glide (false, switchAt);
+            run (engine, 512);
+            return pitchOf (engine, 60) < 59.9;
+        };
+
+        check (! glidesWhenSwitchedAt (100), "switched off before the note: none", 1, 0);
+        check (glidesWhenSwitchedAt (300),   "switched off after it: it glides",   0, 1);
+
+        /*
+         * The unison that was heard: single detached notes, polyphony above one, a long
+         * release. A glide away from a released note takes it over; without glide the tail
+         * rings on beside the next note, as the machine's does.
+         */
+        auto voicesAfterLine = [&] (bool glideOn, bool holdFirst)
+        {
+            auto ringing = makePatch (false);
+            ringing->keygroups[0].vcaRelease = 70;
+
+            s950::Engine engine (48000.0);
+            engine.glideSeconds.store (0.2);
+            engine.setPatch (ringing);
+            engine.glide (glideOn);
+
+            engine.noteOn (48, 127);
+            run (engine, 4800);
+            if (! holdFirst) engine.noteOff (48);
+            run (engine, 480);
+            engine.noteOn (60, 127);
+            run (engine, 960);                             // 20 ms: past the 10 ms hand-over
+
+            return engine.getActiveVoices();
+        };
+
+        check (voicesAfterLine (true, false) == 1, "a glide takes over a released note",
+               voicesAfterLine (true, false), 1);
+        check (voicesAfterLine (false, false) == 2, "without glide its tail rings on",
+               voicesAfterLine (false, false), 2);
+        check (voicesAfterLine (true, true) == 2, "a note still held is left sounding",
+               voicesAfterLine (true, true), 2);
+
+        // ------------------------------------------------------------- the voice count
+
+        std::printf ("\n  the voice count, and mono\n");
+
+        // Three voices: five held keys sound three.
+        {
+            s950::Engine engine (48000.0);
+            engine.setPatch (patch);
+            engine.setVoiceLimit (3);
+
+            for (int n = 60; n < 65; ++n) engine.noteOn (n, 127);
+            run (engine, 64);
+
+            check (engine.getActiveVoices() == 3, "a limit of three sounds three",
+                   engine.getActiveVoices(), 3);
+        }
+
+        // Mono legato: the note moves, gliding, without being struck again.
+        {
+            s950::Engine engine (48000.0);
+            engine.glideSeconds.store (0.1);
+            engine.setPatch (patch);
+            engine.glide (true);
+            engine.setVoiceLimit (1);
+
+            engine.noteOn (48, 127);
+            run (engine, 4800);
+            const long long struck = engine.getVoice (0).getStartedAt();
+
+            engine.noteOn (60, 127);                       // 48 still down
+            run (engine, 2400);
+
+            check (engine.getActiveVoices() == 1, "mono: one voice", engine.getActiveVoices(), 1);
+            check (engine.getVoice (0).getStartedAt() == struck, "legato: not struck again",
+                   static_cast<double> (engine.getVoice (0).getStartedAt()),
+                   static_cast<double> (struck));
+            same ("legato glides", pitchOf (engine, 60), 54.0, 0.1);
+
+            // Let go of the top key: back to the one still down, gliding, still held.
+            run (engine, 4800);
+            engine.noteOff (60);
+            run (engine, 32);
+
+            check (engine.getVoice (0).getNote() == 48 && engine.getVoice (0).isHeld(),
+                   "letting go returns to the held key", engine.getVoice (0).getNote(), 48);
+            check (pitchOf (engine, 48) > 59.0, "gliding back down to it",
+                   pitchOf (engine, 48), 60.0);
+
+            // And letting go of that one too releases the note.
+            engine.noteOff (48);
+            run (engine, 32);
+            check (! engine.getVoice (0).isHeld(), "the last key up releases it", 1, 0);
+        }
+
+        // Mono, detached: a note struck with no key down is struck afresh.
+        {
+            s950::Engine engine (48000.0);
+            engine.setPatch (patch);
+            engine.setVoiceLimit (1);
+
+            engine.noteOn (48, 127);
+            run (engine, 480);
+            const long long struck = engine.getVoice (0).getStartedAt();
+
+            engine.noteOff (48);
+            engine.noteOn (60, 127);
+            run (engine, 32);
+
+            check (engine.getVoice (0).getStartedAt() != struck, "detached: struck afresh",
+                   static_cast<double> (engine.getVoice (0).getStartedAt()),
+                   static_cast<double> (struck + 1));
+        }
+
+        // ------------------------------------------------------------------- wide
+
+        std::printf ("\n  wide\n");
+
+        // Every active voice that is half of a pair has its twin active and pointing back.
+        auto pairsWhole = [] (const s950::Engine& e)
+        {
+            for (int i = 0; i < s950::Engine::Polyphony; ++i)
+            {
+                const auto& v = e.getVoice (i);
+                if (! v.isActive() || v.getPartner() < 0) continue;
+
+                const auto& twin = e.getVoice (v.getPartner());
+                if (! twin.isActive() || twin.getPartner() != i) return false;
+            }
+            return true;
+        };
+
+        // Flat on the left, sharp on the right, by the same amount: 50 cents either way of
+        // 480 Hz is 466.2 and 494.2, counted over a second of each channel.
+        {
+            s950::Engine engine (48000.0);
+            engine.setPatch (patch);
+            engine.wide (true);
+            engine.wideCents.store (50.0);
+            engine.wideSpread.store (1.0);
+            engine.gain.store (0.25f);
+            engine.noteOn (60, 127);
+
+            std::vector<float> l (48000), r (48000);
+            engine.render (l.data(), r.data(), 48000);
+
+            check (engine.getActiveVoices() == 2, "a wide note is two voices",
+                   engine.getActiveVoices(), 2);
+            check (std::abs (upwardCrossings (l) - 466) <= 2, "the left half is flat",
+                   upwardCrossings (l), 466);
+            check (std::abs (upwardCrossings (r) - 494) <= 2, "the right half as far sharp",
+                   upwardCrossings (r), 494);
+        }
+
+        // As loud as one voice: centred, the pair's power matches a plain note's.
+        {
+            auto level = [&] (bool wideOn)
+            {
+                s950::Engine engine (48000.0);
+                engine.setPatch (patch);
+                engine.wide (wideOn);
+                engine.wideCents.store (10.0);
+                engine.wideSpread.store (0.0);
+                engine.gain.store (0.25f);
+                engine.noteOn (60, 127);
+
+                std::vector<float> l (96000), r (96000);
+                engine.render (l.data(), r.data(), 96000);
+                return rms (l);
+            };
+
+            const double plain = level (false), wide = level (true);
+            check (std::fabs (wide - plain) < plain * 0.1, "a wide note is as loud as one",
+                   wide, plain);
+        }
+
+        // Four notes at most, and six held keys never leave half a pair behind.
+        {
+            s950::Engine engine (48000.0);
+            engine.setPatch (patch);
+            engine.wide (true);
+
+            for (int n = 60; n < 66; ++n) { engine.noteOn (n, 127); run (engine, 64); }
+
+            check (engine.getActiveVoices() == 8, "four wide notes fill eight voices",
+                   engine.getActiveVoices(), 8);
+            check (engine.getNoteLimit() == 4, "wide caps the notes at four",
+                   engine.getNoteLimit(), 4);
+            check (pairsWhole (engine), "stealing takes both halves", 0, 1);
+        }
+
+        // Polyphony below four still rules: three notes, six voices.
+        {
+            s950::Engine engine (48000.0);
+            engine.setPatch (patch);
+            engine.wide (true);
+            engine.setVoiceLimit (3);
+
+            for (int n = 60; n < 65; ++n) { engine.noteOn (n, 127); run (engine, 64); }
+
+            check (engine.getActiveVoices() == 6, "three notes wide are six voices",
+                   engine.getActiveVoices(), 6);
+            check (pairsWhole (engine), "and every pair whole", 0, 1);
+        }
+
+        // Mono and wide: legato moves both halves together.
+        {
+            s950::Engine engine (48000.0);
+            engine.setPatch (patch);
+            engine.wide (true);
+            engine.setVoiceLimit (1);
+
+            engine.noteOn (48, 127);
+            run (engine, 480);
+            engine.noteOn (60, 127);
+            run (engine, 64);
+
+            check (engine.getActiveVoices() == 2, "mono wide is two voices",
+                   engine.getActiveVoices(), 2);
+            check (engine.getVoice (0).getNote() == 60 && engine.getVoice (1).getNote() == 60,
+                   "legato moves both halves", engine.getVoice (1).getNote(), 60);
+        }
+
+        // A drum is not doubled.
+        {
+            s950::Engine engine (48000.0);
+            engine.setPatch (makePatch (true));
+            engine.wide (true);
+            engine.noteOn (60, 127);
+            run (engine, 64);
+
+            check (engine.getActiveVoices() == 1, "a constant-pitch keygroup stays single",
+                   engine.getActiveVoices(), 1);
+        }
+
+        // Mono across a split: a held key in the other keygroup is no reason for legato.
+        {
+            auto split = std::make_shared<s950::Patch>();
+
+            for (int k = 0; k < 2; ++k)
+            {
+                s950::KeygroupPatch kg;
+                kg.keygroupIndex = k;
+                kg.lowKey        = k == 0 ? 0  : 60;
+                kg.highKey       = k == 0 ? 59 : 127;
+                kg.sound         = makeSaw (48000, 48000);
+                kg.zoneFilter    = 99;
+                split->keygroups.push_back (kg);
+            }
+
+            s950::Engine engine (48000.0);
+            engine.glideSeconds.store (0.1);
+            engine.setPatch (split);
+            engine.glide (true);
+            engine.setVoiceLimit (1);
+
+            engine.noteOn (48, 127);
+            run (engine, 480);
+            engine.noteOn (72, 127);
+            run (engine, 32);
+
+            check (engine.getVoice (0).getKeygroupIndex() == 1, "mono across a split: struck",
+                   engine.getVoice (0).getKeygroupIndex(), 1);
+            same ("and does not glide", pitchOf (engine, 72), 72.0, 1e-12);
+        }
+    }
 }
 
 int main()
@@ -1261,6 +1757,7 @@ int main()
     checkLfoTrims();
     checkVelocityTrims();
     checkFilterClock();
+    checkGlide();
 
     std::printf ("\n  %d checks, %d failed\n\n", checks, failures);
     return failures == 0 ? 0 : 1;

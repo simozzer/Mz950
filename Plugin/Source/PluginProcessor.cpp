@@ -201,6 +201,81 @@ VirtualS950Processor::describeParameters()
     addRange ("velToFilter",   "Vel Freq",     0.0f, 99.0f);
     addRange ("velToLoudness", "Vel Loudness", 0.0f, 99.0f);
 
+    /*
+     * Portamento - the one control here the S950 never had. See Engine::glide.
+     *
+     * Absolute settings rather than offsets, because there is nothing on the disk for them
+     * to be offset from. Off by default, so a programme plays as the disk has it until
+     * somebody asks for more.
+     *
+     * The time is in milliseconds rather than a 0..99, since there is no panel value it
+     * would be pretending to be. Zero is no glide at all and the top is three seconds, so
+     * CC 5 reads 0 as "off" and 127 as the longest swoop. Skewed so a controller's middle
+     * lands near half a second: most of the travel goes on the short glides that get
+     * played, and the last stretch reaches the long ones.
+     */
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { "glide", 1 }, "Glide", false));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "glideTime", 1 },
+        "Glide Time",
+        juce::NormalisableRange<float> (0.0f, 3000.0f, 0.0f, 0.4f),
+        120.0f,
+        juce::AudioParameterFloatAttributes().withStringFromValueFunction (
+            [] (float v, int)
+            {
+                // Under half a millisecond Voice::start does not glide at all, so say so.
+                if (v <= 0.5f) return juce::String ("no glide");
+
+                return v < 1000.0f ? juce::String (juce::roundToInt (v)) + " ms"
+                                   : juce::String (v / 1000.0f, 2) + " s";
+            })));
+
+    /*
+     * How many voices, 1 to 8 - also not the machine's, which always has eight. One is
+     * mono, which is where glide plays like a monosynth's: see Engine::setVoiceLimit.
+     */
+    layout.add (std::make_unique<juce::AudioParameterInt> (
+        juce::ParameterID { "voices", 1 },
+        "Polyphony",        // not "Voices": on a synth that reads as unison, which this is not
+        1, s950::Engine::Polyphony, s950::Engine::Polyphony,
+        juce::AudioParameterIntAttributes().withStringFromValueFunction (
+            [] (int v, int) { return v == 1 ? juce::String ("mono") : juce::String (v); })));
+
+    /*
+     * Wide - not the S950's either. See Engine::wide. Two voices a note, detuned apart by the
+     * same amount either way and spread across the stereo field; four notes at most, being
+     * the machine's eight voices two at a time.
+     *
+     * Detune is per half, so 10 puts the two 20 cents apart. Fifty is a quarter-tone each
+     * way and past where anything but an effect wants to be; five to fifteen is a chorus.
+     */
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { "wide", 1 }, "Wide", false));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "wideDetune", 1 },
+        "Wide Detune",
+        juce::NormalisableRange<float> (0.0f, 50.0f, 0.0f),
+        10.0f,
+        juce::AudioParameterFloatAttributes().withStringFromValueFunction (
+            [] (float v, int)
+            {
+                return juce::String (juce::CharPointer_UTF8 ("\xc2\xb1")) + juce::String (v, 1) + " ct";
+            })));
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "wideSpread", 1 },
+        "Wide Spread",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.0f),
+        70.0f,
+        juce::AudioParameterFloatAttributes().withStringFromValueFunction (
+            [] (float v, int) { return juce::String (juce::roundToInt (v)) + "%"; })));
+
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { "wideOffset", 1 }, "Wide Offset", true));
+
     return layout;
 }
 
@@ -266,6 +341,27 @@ VirtualS950Processor::VirtualS950Processor()
 {
     gainParameter = parameters.getRawParameterValue ("gain");
     bendRangeParameter = parameters.getRawParameterValue ("bendRange");
+
+    glideParameter     = parameters.getRawParameterValue ("glide");
+    glideTimeParameter = parameters.getRawParameterValue ("glideTime");
+    glideControl       = parameters.getParameter ("glide");
+    glideTimeControl   = parameters.getParameter ("glideTime");
+    jassert (glideParameter != nullptr && glideTimeParameter != nullptr);
+
+    voicesParameter = parameters.getRawParameterValue ("voices");
+    voicesControl   = parameters.getParameter ("voices");
+    jassert (voicesParameter != nullptr && voicesControl != nullptr);
+
+    wideParameter       = parameters.getRawParameterValue ("wide");
+    wideDetuneParameter = parameters.getRawParameterValue ("wideDetune");
+    wideSpreadParameter = parameters.getRawParameterValue ("wideSpread");
+    wideOffsetParameter = parameters.getRawParameterValue ("wideOffset");
+    wideControl         = parameters.getParameter ("wide");
+    wideDetuneControl   = parameters.getParameter ("wideDetune");
+    wideSpreadControl   = parameters.getParameter ("wideSpread");
+    wideOffsetControl   = parameters.getParameter ("wideOffset");
+    jassert (wideParameter != nullptr && wideDetuneParameter != nullptr
+             && wideSpreadParameter != nullptr && wideOffsetParameter != nullptr);
 
     using AT = s950::Engine::AtomicTrims;
 
@@ -339,6 +435,12 @@ void VirtualS950Processor::prepareToPlay (double sampleRate, int samplesPerBlock
     engine = std::make_unique<s950::Engine> (sampleRate);
     engine->setPatch (patch);
 
+    // A new engine starts with glide off, whatever the parameter says; this makes the next
+    // block tell it.
+    glidePosted  = -1;
+    voicesPosted = -1;
+    widePosted   = -1;
+
     // processBlock must not allocate, so the scratch buffer is sized here. A little over,
     // because some hosts hand over a longer block than they promised.
     // Two channels: a keygroup can be sent to LEFT or RIGHT, so the engine fills both.
@@ -382,6 +484,13 @@ void VirtualS950Processor::applyController (juce::RangedAudioParameter* p, int v
         p->setValueNotifyingHost (normalised);
 }
 
+/// A switch moved by a controller: set only if it differs, so a held pedal does not spam.
+void VirtualS950Processor::applySwitch (juce::RangedAudioParameter* p, bool on)
+{
+    if (p != nullptr && (p->getValue() >= 0.5f) != on)
+        p->setValueNotifyingHost (on ? 1.0f : 0.0f);
+}
+
 void VirtualS950Processor::processBlock (juce::AudioBuffer<float>& buffer,
                                          juce::MidiBuffer& midi)
 {
@@ -400,6 +509,46 @@ void VirtualS950Processor::processBlock (juce::AudioBuffer<float>& buffer,
     // host has set for it rather than the one from last time.
     engine->bendRange.store (bendRangeParameter != nullptr ? bendRangeParameter->load() : 2.0f,
                              std::memory_order_relaxed);
+
+    /*
+     * Glide's switch, from the parameter - which is where the button, the host's automation
+     * and a restored session all arrive. Posted at the start of the block and only when it
+     * has changed, so it goes ahead of this block's notes and costs nothing when idle. CC 65
+     * below posts its own, at the sample it arrived on.
+     */
+    {
+        const int wanted = (glideParameter != nullptr && glideParameter->load() >= 0.5f) ? 1 : 0;
+
+        if (wanted != glidePosted)
+        {
+            engine->glide (wanted != 0, 0);
+            glidePosted = wanted;
+        }
+    }
+
+    // The voice count, the same way and for the same reasons. CC 106 posts its own below.
+    {
+        const int wanted = voicesParameter != nullptr
+                             ? juce::roundToInt (voicesParameter->load())
+                             : s950::Engine::Polyphony;
+
+        if (wanted != voicesPosted)
+        {
+            engine->setVoiceLimit (wanted, 0);
+            voicesPosted = wanted;
+        }
+    }
+
+    // Wide's switch, the same way again. CC 107 posts its own below.
+    {
+        const int wanted = (wideParameter != nullptr && wideParameter->load() >= 0.5f) ? 1 : 0;
+
+        if (wanted != widePosted)
+        {
+            engine->wide (wanted != 0, 0);
+            widePosted = wanted;
+        }
+    }
 
     /*
      * Every message, with where in this block it happens.
@@ -428,6 +577,67 @@ void VirtualS950Processor::processBlock (juce::AudioBuffer<float>& buffer,
             engine->aftertouch (m.getChannelPressureValue(), at);
         else if (m.isAllNotesOff() || m.isAllSoundOff())
             engine->allNotesOff (at);
+
+        /*
+         * 65 and 5 are General MIDI's own portamento switch and portamento time, so a
+         * keyboard or a sequencer with a glide control reaches these with no mapping.
+         *
+         * The switch goes to the engine at its own sample, AND moves the parameter so the
+         * button follows and the host can record it. glidePosted is set here too, so the top
+         * of the next block sees the parameter already agrees and posts nothing twice.
+         */
+        else if (m.isController() && m.getControllerNumber() == 65)
+        {
+            const bool on = m.getControllerValue() >= 64;
+
+            engine->glide (on, at);
+            glidePosted = on ? 1 : 0;
+
+            if (glideControl != nullptr && (glideControl->getValue() >= 0.5f) != on)
+                glideControl->setValueNotifyingHost (on ? 1.0f : 0.0f);
+        }
+        else if (m.isController() && m.getControllerNumber() == 5)
+            applyController (glideTimeControl, m.getControllerValue());
+
+        /*
+         * 106, undefined in General MIDI, for the voice count. Eight equal bands of sixteen
+         * - 0-15 is mono, 112-127 all eight - rather than the parameter's own rounding, which
+         * would give the two ends half the width of the rest.
+         */
+        else if (m.isController() && m.getControllerNumber() == 106)
+        {
+            const int count = 1 + m.getControllerValue() * s950::Engine::Polyphony / 128;
+
+            engine->setVoiceLimit (count, at);
+            voicesPosted = count;
+
+            if (voicesControl != nullptr)
+            {
+                const float normalised = voicesControl->convertTo0to1 (static_cast<float> (count));
+
+                if (voicesControl->getValue() != normalised)
+                    voicesControl->setValueNotifyingHost (normalised);
+            }
+        }
+
+        /*
+         * Wide: 107 switches it, 108 is the detune, 110 the spread, 111 the start offset -
+         * all undefined in General MIDI. 109 is velocity-to-filter already, hence the gap.
+         */
+        else if (m.isController() && m.getControllerNumber() == 107)
+        {
+            const bool on = m.getControllerValue() >= 64;
+
+            engine->wide (on, at);
+            widePosted = on ? 1 : 0;
+            applySwitch (wideControl, on);
+        }
+        else if (m.isController() && m.getControllerNumber() == 108)
+            applyController (wideDetuneControl, m.getControllerValue());
+        else if (m.isController() && m.getControllerNumber() == 110)
+            applyController (wideSpreadControl, m.getControllerValue());
+        else if (m.isController() && m.getControllerNumber() == 111)
+            applySwitch (wideOffsetControl, m.getControllerValue() >= 64);
         else if (m.isController())
         {
             for (const auto& t : trimControls)
@@ -454,6 +664,19 @@ void VirtualS950Processor::processBlock (juce::AudioBuffer<float>& buffer,
     for (const auto& t : trimControls)
         if (t.value != nullptr)
             (engine->trims.*(t.target)).store (t.value->load(), std::memory_order_relaxed);
+
+    // After the messages for the same reason as the trims: CC 5 in this block is heard in it.
+    if (glideTimeParameter != nullptr)
+        engine->glideSeconds.store (glideTimeParameter->load() / 1000.0,
+                                    std::memory_order_relaxed);
+
+    // And wide's three continuous settings, likewise.
+    if (wideDetuneParameter != nullptr)
+        engine->wideCents.store (wideDetuneParameter->load(), std::memory_order_relaxed);
+    if (wideSpreadParameter != nullptr)
+        engine->wideSpread.store (wideSpreadParameter->load() / 100.0, std::memory_order_relaxed);
+    if (wideOffsetParameter != nullptr)
+        engine->wideOffset.store (wideOffsetParameter->load() >= 0.5f, std::memory_order_relaxed);
 
     /*
      * Two channels, because a keygroup can be sent to LEFT or RIGHT.

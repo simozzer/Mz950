@@ -3,9 +3,16 @@
 namespace s950
 {
     void Voice::start (const KeygroupPatch& group, int n, int vel,
-                       double rate, double wheel, long long sequence, double fade)
+                       double rate, double wheel, long long sequence, double fade,
+                       double glideSemis, double glideSeconds)
     {
         crossfade     = fade;
+        handedOver    = false;
+        wideSign      = 0;              // a plain voice until makeWide says otherwise
+        partner       = -1;
+        wideRatio     = 1.0;
+        wideGainL     = 1.0;
+        wideGainR     = 1.0;
         kg            = &group;
         sound         = group.sound;
         note          = n;
@@ -24,6 +31,12 @@ namespace s950
         leaveRate = sound->sourceRate * ratio;
         pos       = 0.0;
         dir       = 1;               // forwards until an alternating loop turns it round
+
+        // --- glide. The target pitch above is untouched; render() multiplies the offset on
+        // top, as it does the wheel, so arriving is simply the offset reaching zero.
+        const bool glides = glideSeconds > 0.0005 && glideSemis != 0.0;
+        glideOffset    = glides ? glideSemis : 0.0;
+        glidePerSecond = glides ? std::abs (glideSemis) / glideSeconds : 0.0;
 
         // --- amplitude envelope. Only the peak is fixed at the strike: it is what the
         // velocity and the zone trim decided, and no control moves it afterwards.
@@ -119,6 +132,31 @@ namespace s950
         applyLfo();
     }
 
+    void Voice::legatoTo (int n, double glideSemis, double glideSeconds)
+    {
+        if (stage == Stage::idle || kg == nullptr)
+            return;
+
+        note = n;
+
+        // --- pitch, as start() works it out, under the position we already hold
+        double semis = kg->zoneTranspose;
+        if (! kg->constantPitch)
+            semis += note - sound->rootPitch;
+
+        const double ratio = std::pow (2.0, semis / 12.0);
+        step      = sound->sourceRate / sampleRate * ratio;
+        leaveRate = sound->sourceRate * ratio;
+        ceiling   = std::min (cal::MaxRatio * leaveRate, sampleRate * 0.45);
+        floorHz   = std::min (cal::FloorHz, ceiling);
+
+        // --- glide, as start() does it. Key tracking follows by itself: applyTrims reads
+        // `note` at the top of every control block.
+        const bool glides = glideSeconds > 0.0005 && glideSemis != 0.0;
+        glideOffset    = glides ? glideSemis : 0.0;
+        glidePerSecond = glides ? std::abs (glideSemis) / glideSeconds : 0.0;
+    }
+
     /*
      * The envelope times and levels, from the keygroup and the player's trims together.
      *
@@ -147,6 +185,9 @@ namespace s950
                           cal::velocityReleaseByte (trimmed (kg->vcaRelease, trims.vcaRelease),
                                                     kg->velToRelease, velocity,
                                                     kg->velocityReleaseOn));
+
+        if (handedOver)
+            releaseTime = std::min (releaseTime, HandOverRelease);
 
         // A stored sustain of ZERO is silence, and is not the bottom of the line the other
         // settings sit on - see cal::VcaSilenceDb. It used to stop 39.6 dB down and hang
@@ -232,6 +273,15 @@ namespace s950
         if (stage == Stage::idle || stage == Stage::release)
             return;
 
+        /*
+         * Letting go mid-glide stops the glide where it stands: the tail fades at the pitch
+         * the note had reached rather than sliding on through the release. Ahead of the
+         * one-shot test, because the KEY was let go even if the sample plays on - and a
+         * glide belongs to the key. Engine::stopNote makes sure the next note does not slide
+         * from here either.
+         */
+        glidePerSecond = 0.0;
+
         // A one-shot keygroup is a drum: it plays through whatever the key does.
         if (kg != nullptr && kg->oneShot && ! sound->loops)
             return;
@@ -247,6 +297,54 @@ namespace s950
         vcfReleaseT    = 0.0;
     }
 
+    void Voice::handOver()
+    {
+        if (stage != Stage::release || handedOver)
+            return;
+
+        // The release is a rate measured from where it starts, so restart it from here -
+        // otherwise the shorter time would be applied to all the time already spent, and
+        // the gain would drop in one step, which is the click this is meant to avoid.
+        handedOver  = true;
+        releaseFrom = gain;
+        t           = 0.0;
+        releaseTime = std::min (releaseTime, HandOverRelease);
+    }
+
+    void Voice::makeWide (int sign, int partnerIndex, bool offset)
+    {
+        wideSign = sign < 0 ? -1 : 1;
+        partner  = partnerIndex;
+
+        /*
+         * Seven milliseconds of the source into the sample, for the sharp half only. Long
+         * enough that the two halves are well out of phase from the first cycle; short
+         * enough that the attack is still the attack. Kept inside the audio, and inside the
+         * loop for a sample that loops, so it can never start past where it can play.
+         */
+        if (offset && wideSign > 0 && sound != nullptr)
+        {
+            const double end = (sound->loops && sound->loopTo > sound->loopFrom)
+                                 ? sound->loopTo : static_cast<double> (sound->audio.size());
+
+            pos = std::min (sound->sourceRate * 0.007, std::max (0.0, end - 1.0));
+        }
+    }
+
+    void Voice::setWide (double cents, double spread)
+    {
+        if (wideSign == 0)
+            return;
+
+        wideRatio = std::pow (2.0, wideSign * cents / 1200.0);
+
+        // Equal-power: pi/4 is the centre, 0 hard left, pi/2 hard right.
+        const double theta = 3.14159265358979323846 / 4.0
+                             * (1.0 + wideSign * cal::clamp (spread, 0.0, 1.0));
+        wideGainL = std::cos (theta);
+        wideGainR = std::sin (theta);
+    }
+
     void Voice::render (float* left, float* right, int count, double sharedPhase)
     {
         if (stage == Stage::idle)
@@ -254,8 +352,11 @@ namespace s950
 
         // hoisted out of the sample loop: neither changes while a block renders
         const bool  stereo = right != nullptr;
-        const float panL   = stereo ? static_cast<float> (outL) : 1.0f;
-        const float panR   = stereo ? static_cast<float> (outR) : 0.0f;
+        // A wide half folds into the mono path at -3 dB, the level its pan law gives it at
+        // the centre, so the two halves together are one note's worth there too.
+        const float panL   = stereo ? static_cast<float> (outL * wideGainL)
+                                    : (wideSign != 0 ? 0.70710678f : 1.0f);
+        const float panR   = stereo ? static_cast<float> (outR * wideGainR) : 0.0f;
         float* const buffer = left;
 
         const float* audio = sound->audio.data();
@@ -292,7 +393,31 @@ namespace s950
             const double warp = cal::warpRatio (kg->warpVelocity, kg->warpDepth, kg->warpTime,
                                                 velocity, sinceOn);
 
-            const double stepNow = step * bend * warp * wheelBend;
+            /*
+             * The glide, taken at the MIDDLE of this control block and then moved on by the
+             * whole of it. Reading it at the start would leave every block half a block
+             * behind, and a fast glide over a wide interval would land a little late.
+             *
+             * A constant-pitch keygroup ignores the key, so it ignores a glide between keys
+             * too - otherwise a drum would swoop every time the line under it moved.
+             */
+            double glide = 1.0;
+            if (glideOffset != 0.0)
+            {
+                const double by = glidePerSecond * n * dt;
+
+                if (! kg->constantPitch)
+                {
+                    const double mid = glideOffset > 0.0 ? std::max (0.0, glideOffset - by * 0.5)
+                                                         : std::min (0.0, glideOffset + by * 0.5);
+                    glide = std::pow (2.0, mid / 12.0);
+                }
+
+                glideOffset = glideOffset > 0.0 ? std::max (0.0, glideOffset - by)
+                                                : std::min (0.0, glideOffset + by);
+            }
+
+            const double stepNow = step * bend * warp * wheelBend * glide * wideRatio;
 
             double       gainNow  = gain;
             const double gainEnd  = envelopeAfter (n * dt);

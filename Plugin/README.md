@@ -44,6 +44,36 @@ touched. An offset keeps the shape its author gave it and moves the whole of it,
 | VCF envelope | Attack, Decay, Sustain, Release | 102, 103, 104, 105 | ±99 |
 | LFO | Rate, Depth, Delay | 76, 77, 78 | 0..99 |
 | Velocity | Freq, Loudness | 109, 112 | 0..99 |
+| Glide *(not on the S950)* | On, Time | 65, 5 | off/on; 0 (no glide) – 3 s |
+| Polyphony *(not on the S950)* | Poly | 106 | 1 (mono) – 8; CC in bands of 16 |
+| Wide *(not on the S950)* | On, Detune, Spread, Offset start | 107, 108, 110, 111 | off/on; ±0–50 cents; 0–100%; off/on |
+
+**Glide is the one addition to the machine.** Everything else here is the S950, measured;
+the S950 has no portamento. It is off by default, so a programme still plays as the disk
+describes it. CC 65 and CC 5 are General MIDI's own portamento switch and time, so a keyboard
+with a glide control reaches them with no mapping. A glide takes the set time whatever the
+interval, straight in semitones, and **stays inside a keygroup**: a note slides from the last
+note played in its own keygroup, and crossing into another one — a different sample, and on a
+split a different instrument — does not slide. Letting go of a key mid-glide stops the slide
+where it stands, and the next note in that keygroup plays at its own pitch. CC 5 at 0 is no
+glide and at 127 is three seconds. Constant-pitch keygroups never glide.
+
+**Polyphony** is a limit on how many notes can sound at once, not a unison stack. At 3 a
+fourth key steals the oldest note; at 1 (**mono**) no chord can be played, and it plays like a
+monosynth. A key struck while another is still held in the same keygroup moves the note there
+without restarting the sample or the envelope, gliding if glide is on. Letting go of the top
+key goes back to the newest key still held. A detached note, or one in another keygroup,
+starts fresh. In mono a layered programme sounds only its first keygroup. CC 106 is unassigned
+in General MIDI; 0–15 is mono and 112–127 is all eight.
+
+**Wide** plays every note as two voices, one detuned flat and panned left, one detuned sharp
+by the same amount and panned right. The note stays centred on its true pitch and is as loud
+as a single voice wherever Spread is set. It works in mono and poly. A pair is two of the
+eight voices, so Wide caps playing at **four notes**, matching the S950's 8 voices; below
+four, Polyphony sets the limit. The two halves are always stolen together, so a note never
+loses its flat or sharp half. *Offset start* begins the sharp half 7 ms into the sample so the
+pair doesn't flange at the attack. Constant-pitch keygroups are never doubled. Glide, legato
+and the release hand-over all move both halves together.
 
 72–79 are the General MIDI sound controllers, so a keyboard with knobs labelled *cutoff* and
 *attack* reaches the right ones with no mapping — including 76, 77 and 78 for vibrato rate,

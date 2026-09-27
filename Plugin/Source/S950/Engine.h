@@ -142,6 +142,70 @@ namespace s950
         std::atomic<double> bendRange { 2.0 };
         void allNotesOff (int at = 0)                    { post (EvAllOff,  0, 0, at); }
 
+        /*
+         * PORTAMENTO, WHICH THE S950 NEVER HAD
+         *
+         * Everything else in this engine is the machine, measured. This is not: it is an
+         * addition, and it is off until something turns it on, so a programme still plays
+         * exactly as the disk describes it.
+         *
+         * Switched through the ring rather than an atomic, so it lands on the sample the host
+         * put it at. A sequenced line toggling glide between two notes a few samples apart
+         * has to get the order right, and a flag read once a block cannot promise that.
+         *
+         * Each new note glides from the pitch of the note struck before it IN THE SAME
+         * KEYGROUP - or from where that note had got to, if it was still gliding. Crossing
+         * into another keygroup does not glide: see GlideMemory. Within one keygroup a line
+         * slides, and a chord slides as a whole from the note before it, because every note
+         * of it starts from the same place.
+         */
+        void glide (bool on, int at = 0)                 { post (EvGlide, on ? 1 : 0, 0, at); }
+
+        /// How long a glide takes, whatever the interval. Read when a note starts.
+        std::atomic<double> glideSeconds { 0.12 };
+
+        /*
+         * How many of the eight voices to use, 1 to 8. Also not the machine's: it always
+         * has all eight.
+         *
+         * One is MONO, and mono plays like a monosynth rather than a sampler with seven
+         * voices missing. A key struck while another is still down in the same keygroup
+         * moves the sounding note to it - legato, the sample carrying on - gliding there if
+         * glide is on. Letting go of the top key goes back to the last one still held. A
+         * detached note, or one in a different keygroup, strikes afresh. A layered programme
+         * sounds only its first keygroup, there being one voice to sound it with.
+         *
+         * Through the ring like glide, so it lands on its sample. Voices past a lowered limit
+         * are not cut off: they finish what they are playing and are then left alone.
+         */
+        void setVoiceLimit (int count, int at = 0)       { post (EvVoices, count, 0, at); }
+
+        /*
+         * WIDE, WHICH THE S950 NEVER HAD EITHER
+         *
+         * Every note sounds as two voices, one detuned flat and leaning left, one detuned
+         * sharp by the same amount and leaning right - centred on the right pitch, and as
+         * loud as one voice. Mono or poly.
+         *
+         * A pair is two of the eight voices, so wide caps the notes at FOUR: the machine's
+         * eight voices, two to a note. Below four the Polyphony control still sets it. The
+         * two halves are stolen together, never one alone - a note left with only its flat
+         * half would sound flat and off to one side, which is the worst artifact this could
+         * have. Constant-pitch keygroups are not doubled: a drum has no pitch to detune.
+         *
+         * The switch is an event, like glide, and reaches the NEXT note struck. Detune and
+         * spread are read every stretch and reach notes already sounding. The start offset
+         * is read when a note starts.
+         */
+        void wide (bool on, int at = 0)                  { post (EvWide, on ? 1 : 0, 0, at); }
+
+        std::atomic<double> wideCents  { 10.0 };        // each half, either way
+        std::atomic<double> wideSpread { 0.7 };         // 0 centred, 1 hard left and right
+        std::atomic<bool>   wideOffset { true };        // sharp half starts 7 ms in
+
+        /// How many notes can sound at once right now, after wide has had its say.
+        int getNoteLimit() const { return wideOn ? std::min (voiceLimit, Polyphony / 2) : voiceLimit; }
+
         // -------------------------------------------------------------------- render
 
         /// Fill `count` mono samples. Allocates nothing.
@@ -171,6 +235,9 @@ namespace s950
         static constexpr unsigned char EvAllOff  = 4;
         static constexpr unsigned char EvBend    = 5;
         static constexpr unsigned char EvPressure = 6;
+        static constexpr unsigned char EvGlide    = 7;
+        static constexpr unsigned char EvVoices   = 8;
+        static constexpr unsigned char EvWide     = 9;
 
         static constexpr int RingSize = 256;
 
@@ -192,8 +259,12 @@ namespace s950
         /// Every voice into one stretch of the buffer.
         void renderSpan (float* left, float* right, int count);
         void repatch();
-        void startNote (int note, int velocity);
+        /// `legato` allows a mono voice to move to this note rather than strike it.
+        void startNote (int note, int velocity, bool legato = false);
         void stopNote (int note);
+
+        /// Voice i let go, and forgotten as a glide's origin if it was cut off mid-glide.
+        void releaseVoice (int i);
         Voice& take();
 
         double sampleRate = 48000.0;
@@ -224,5 +295,54 @@ namespace s950
         int       wheel = 0;
         int       pressure = 0;          // channel aftertouch, at rest at nothing
         int       bend14 = 8192;         // the pitch wheel, at rest in the middle
+
+        /*
+         * Portamento's memory, one slot per keygroup, indexed by keygroupIndex.
+         *
+         * Per keygroup because a glide only makes sense INSIDE one. A keygroup is one sample
+         * over one range of keys; crossing into the next is a different sample, and on a
+         * split it is a different instrument - a bass note sliding up into the lead above it
+         * is not portamento, it is a mistake. So each keygroup remembers its own last note
+         * and glides only from that.
+         *
+         * pitch is -1 until the keygroup has played, so its first note has nowhere to come
+         * from. voice is the voice that note started, and sequence proves it has not since
+         * been taken for something else. Fixed-size so a note never allocates; a keygroup
+         * past the end of the table simply does not glide. Cleared when the patch changes,
+         * because keygroup 3 of one programme has nothing to do with keygroup 3 of another.
+         */
+        struct GlideMemory
+        {
+            double    pitch    = -1.0;
+            int       voice    = -1;
+            long long sequence = -1;
+        };
+
+        static constexpr int GlideSlots = 64;
+
+        bool        glideOn = false;
+        GlideMemory glideFrom[GlideSlots];
+
+        int  voiceLimit = Polyphony;     // in NOTES - see getNoteLimit
+        bool wideOn     = false;
+
+        /// Kill voice i, and its twin with it if it is half of a pair. See Engine::wide.
+        void killPair (int i);
+
+        /*
+         * The keys that are down, oldest first, with how hard each was struck.
+         *
+         * Kept whatever the voice count, because switching to mono with keys held must know
+         * what they are. Only mono reads it: letting go of the top key goes back to the one
+         * below. A key appears once - struck again, it moves to the top.
+         */
+        int heldNote[128] {}, heldVelocity[128] {};
+        int heldCount = 0;
+
+        void pressKey (int note, int velocity);
+        void liftKey (int note);
+
+        /// Where a note in this keygroup glides from: -1 for nowhere.
+        double glideOrigin (int keygroupIndex) const;
     };
 }

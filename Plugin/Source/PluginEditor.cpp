@@ -579,6 +579,101 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
     lfoHeading.setText ("LFO", juce::dontSendNotification);
     velocityHeading.setText ("VELOCITY", juce::dontSendNotification);
 
+    // Glide. Not a machine feature, and the heading is where that gets said once.
+    glideHeading.setText ("GLIDE & POLYPHONY  (not on the S950)", juce::dontSendNotification);
+    glideHeading.setJustificationType (juce::Justification::centredLeft);
+    glideHeading.setColour (juce::Label::textColourId, juce::Colours::grey);
+    addAndMakeVisible (glideHeading);
+
+    const juce::String glideTip =
+        "Portamento: each note slides in from the last note played in the same keygroup. "
+        "Crossing into another keygroup does not glide. An addition - the S950 has no "
+        "glide. MIDI CC 65 switches it (64 and up is on), CC 5 sets the time.";
+
+    glideButton.setTooltip (glideTip);
+    addAndMakeVisible (glideButton);
+    glideAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
+        processor.parameters, "glide", glideButton);
+
+    glideTime.setTooltip ("How long a glide takes, whatever the interval. MIDI CC 5: "
+                          "0 is no glide, 127 is three seconds.");
+    glideTime.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 56, 13);
+    addAndMakeVisible (glideTime);
+    glideTimeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+        processor.parameters, "glideTime", glideTime);
+
+    // After the attachment: it sets the range, and the double-click value must lie inside it.
+    glideTime.setDoubleClickReturnValue (true, 120.0);
+
+    glideTimeLabel.setText ("Time", juce::dontSendNotification);
+    glideTimeLabel.setJustificationType (juce::Justification::centred);
+    glideTimeLabel.setTooltip (glideTime.getTooltip());
+    addAndMakeVisible (glideTimeLabel);
+
+    voiceCount.setTooltip ("Polyphony: the most notes that can sound at once, 1 to 8 - "
+                           "a limit, not a unison stack. At 1 (mono) no chords; a key struck "
+                           "while another is held moves the note there without restarting "
+                           "it, gliding if glide is on, and letting go goes back to the key "
+                           "still held. MIDI CC 106: 0-15 is mono, 112-127 all eight.");
+    voiceCount.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 46, 13);
+    addAndMakeVisible (voiceCount);
+    voiceCountAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+        processor.parameters, "voices", voiceCount);
+    voiceCount.setDoubleClickReturnValue (true, 8.0);
+
+    // --- wide
+    wideHeading.setText ("WIDE  (not on the S950)", juce::dontSendNotification);
+    wideHeading.setJustificationType (juce::Justification::centredLeft);
+    wideHeading.setColour (juce::Label::textColourId, juce::Colours::grey);
+    addAndMakeVisible (wideHeading);
+
+    wideButton.setTooltip ("Wide: every note as two voices, one detuned flat and leaning left, "
+                           "one sharp by the same amount and leaning right. At most four notes "
+                           "- the S950's eight voices, two to a note. An addition: the S950 "
+                           "has no such thing. MIDI CC 107 (64 and up is on).");
+    addAndMakeVisible (wideButton);
+    wideAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
+        processor.parameters, "wide", wideButton);
+
+    offsetButton.setTooltip ("Start the sharp half 7 ms into the sample, so the pair is not in "
+                             "phase at the attack and does not flange. Off keeps the sharpest "
+                             "attack. MIDI CC 111.");
+    addAndMakeVisible (offsetButton);
+    offsetAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
+        processor.parameters, "wideOffset", offsetButton);
+
+    auto setUpWideKnob = [this] (juce::Slider& s, juce::Label& l, const char* id,
+                                 const char* name, const char* tip, double reset,
+                                 std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>& a)
+    {
+        s.setTooltip (tip);
+        s.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 56, 13);
+        addAndMakeVisible (s);
+        a = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+            processor.parameters, id, s);
+        s.setDoubleClickReturnValue (true, reset);
+
+        l.setText (name, juce::dontSendNotification);
+        l.setJustificationType (juce::Justification::centred);
+        l.setTooltip (tip);
+        addAndMakeVisible (l);
+    };
+
+    setUpWideKnob (wideDetune, wideDetuneLabel, "wideDetune", "Detune",
+                   "How far each half is pulled off the note, in cents, one flat and one "
+                   "sharp. 5-15 is a chorus; 25 and up goes sour. MIDI CC 108.",
+                   10.0, wideDetuneAttachment);
+
+    setUpWideKnob (wideSpread, wideSpreadLabel, "wideSpread", "Spread",
+                   "How far apart the halves sit in stereo: 0 both centred, 100 hard left "
+                   "and right. As loud either way. MIDI CC 110.",
+                   70.0, wideSpreadAttachment);
+
+    voiceCountLabel.setText ("Poly", juce::dontSendNotification);
+    voiceCountLabel.setJustificationType (juce::Justification::centred);
+    voiceCountLabel.setTooltip (voiceCount.getTooltip());
+    addAndMakeVisible (voiceCountLabel);
+
     vcaEnvelope.setTooltip ("The amplitude envelope, across every keygroup in the programme. "
                             "Drag the corners; double-click one to put that stage back to what "
                             "the disk says. MIDI CC 73 attack, 75 decay, 79 sustain, 72 release.");
@@ -774,7 +869,20 @@ void VirtualS950Editor::timerCallback()
      * is thirty years old and some of them do not read cleanly; finding that out from a
      * label beats finding it out from a hole in a take.
      */
-    juce::String state = juce::String (voices) + " of 8 voices";
+    /*
+     * Voices sounding, and how many NOTES may: the Polyphony control, capped at four when
+     * wide is on because each note is then two of the eight voices.
+     */
+    const auto* limit  = processor.parameters.getRawParameterValue ("voices");
+    const auto* wideOn = processor.parameters.getRawParameterValue ("wide");
+    const bool  wide   = wideOn != nullptr && wideOn->load() >= 0.5f;
+
+    int notes = limit != nullptr ? juce::roundToInt (limit->load()) : 8;
+    if (wide) notes = juce::jmin (notes, 4);
+
+    juce::String state = juce::String (voices) + " of 8 voices   -   up to "
+                       + juce::String (notes) + (notes == 1 ? " note (mono)" : " notes")
+                       + (wide ? ", wide" : "");
 
     const int bad     = processor.getBadSectors();
     const int missing = processor.getMissingSectors();
@@ -923,6 +1031,27 @@ void VirtualS950Editor::resized()
     r.removeFromBottom (12);
     auto samples = r.removeFromBottom (108);
 
+    // Wide in the space that was left above, so the window did not have to grow for it.
+    r.removeFromBottom (12);
+    auto wideRow = r.removeFromBottom (108);
+
+    wideHeading.setBounds (wideRow.removeFromTop (16));
+    wideRow.removeFromTop (4);
+
+    wideButton.setBounds (wideRow.removeFromLeft (78).withSizeKeepingCentre (64, 24));
+    wideRow.removeFromLeft (8);
+
+    for (const auto& pair : { std::make_pair (&wideDetune, &wideDetuneLabel),
+                              std::make_pair (&wideSpread, &wideSpreadLabel) })
+    {
+        auto cell = wideRow.removeFromLeft (78);
+        pair.second->setBounds (cell.removeFromBottom (13));
+        pair.first->setBounds (cell.reduced (1));
+        wideRow.removeFromLeft (8);
+    }
+
+    offsetButton.setBounds (wideRow.removeFromLeft (120).withSizeKeepingCentre (116, 24));
+
     /*
      * A row of knobs under a heading, laid out left to right.
      *
@@ -945,7 +1074,27 @@ void VirtualS950Editor::resized()
         }
     };
 
-    placeRow (samples,  sampleHeading,   "SAMPLE");
+    // Filter keeps its own cell at the left; glide takes the space the row was left with.
+    auto filterCell = samples.removeFromLeft (86);
+    samples.removeFromLeft (24);
+
+    placeRow (filterCell, sampleHeading, "SAMPLE");
+
+    glideHeading.setBounds (samples.removeFromTop (16));
+    samples.removeFromTop (4);
+
+    auto switchCell = samples.removeFromLeft (78);
+    glideButton.setBounds (switchCell.withSizeKeepingCentre (64, 24));
+    samples.removeFromLeft (8);
+
+    auto timeCell = samples.removeFromLeft (78);
+    glideTimeLabel.setBounds (timeCell.removeFromBottom (13));
+    glideTime.setBounds (timeCell.reduced (1));
+    samples.removeFromLeft (8);
+
+    auto voicesCell = samples.removeFromLeft (78);
+    voiceCountLabel.setBounds (voicesCell.removeFromBottom (13));
+    voiceCount.setBounds (voicesCell.reduced (1));
     placeRow (lfo,      lfoHeading,      "LFO");
     placeRow (velocity, velocityHeading, "VELOCITY");
 

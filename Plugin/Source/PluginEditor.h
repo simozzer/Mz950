@@ -171,6 +171,41 @@ private:
     EnvelopeEditor vcfEnvelope { processor, true  };
 
     juce::Label  vcaHeading, vcfHeading, sampleHeading, lfoHeading, velocityHeading;
+
+    /*
+     * Portamento, which the S950 never had.
+     *
+     * Not in `knobs`: those are all offsets from the disk, with tooltips and double-clicks
+     * that say so, and neither of these is. The switch is a button because it is a switch.
+     */
+    juce::Label        glideHeading, glideTimeLabel;
+    juce::ToggleButton glideButton { "On" };
+    juce::Slider       glideTime { juce::Slider::RotaryHorizontalVerticalDrag,
+                                   juce::Slider::TextBoxBelow };
+
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> glideAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> glideTimeAttachment;
+
+    /// How many voices, 1 (mono) to 8. In the glide group because mono is what it is for.
+    juce::Slider voiceCount { juce::Slider::RotaryHorizontalVerticalDrag,
+                              juce::Slider::TextBoxBelow };
+    juce::Label  voiceCountLabel;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> voiceCountAttachment;
+
+    /*
+     * Wide, which the S950 never had: its own row, headed as an addition like glide's.
+     */
+    juce::Label        wideHeading, wideDetuneLabel, wideSpreadLabel;
+    juce::ToggleButton wideButton   { "On" };
+    juce::ToggleButton offsetButton { "Offset start" };
+    juce::Slider       wideDetune { juce::Slider::RotaryHorizontalVerticalDrag,
+                                    juce::Slider::TextBoxBelow };
+    juce::Slider       wideSpread { juce::Slider::RotaryHorizontalVerticalDrag,
+                                    juce::Slider::TextBoxBelow };
+
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> wideAttachment, offsetAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> wideDetuneAttachment,
+                                                                          wideSpreadAttachment;
     juce::Label  patchLabel;
     juce::Label  voicesLabel;
 

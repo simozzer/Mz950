@@ -86,6 +86,11 @@ namespace s950
         // Notes already sounding take up the new settings where they stand, rather than
         // waiting to be struck again.
         repatch();
+
+        // A new programme's keygroups have no last notes yet: glide memory is per keygroup,
+        // and keygroup 3 of the old programme is nothing to do with keygroup 3 of this one.
+        for (auto& memory : glideFrom)
+            memory = GlideMemory {};
     }
 
     // ---------------------------------------------------------------------- the ring
@@ -139,14 +144,23 @@ namespace s950
 
         switch (e.kind)
         {
-            case EvNoteOn:  startNote (e.a, e.b); break;
-            case EvNoteOff: stopNote (e.a);       break;
+            // Legato only if another key is still down once this one is counted.
+            case EvNoteOn:  pressKey (e.a, e.b); startNote (e.a, e.b, heldCount > 1); break;
+            case EvNoteOff: liftKey (e.a);       stopNote (e.a);                      break;
+
+            case EvWide:    wideOn = e.a != 0;           break;
+
+            case EvVoices:
+                voiceLimit = e.a < 1 ? 1 : (e.a > Polyphony ? Polyphony : e.a);
+                break;
             case EvWheel:   wheel = e.a;                break;
             case EvPressure: pressure = e.a;            break;
             case EvBend:    bend14 = (e.a << 7) | e.b;  break;
+            case EvGlide:   glideOn = e.a != 0;         break;
 
             case EvAllOff:
-                for (auto& v : voices) v.release();
+                heldCount = 0;
+                for (int i = 0; i < Polyphony; ++i) releaseVoice (i);
                 break;
 
             default: break;
@@ -189,12 +203,78 @@ namespace s950
         }
     }
 
-    void Engine::startNote (int note, int velocity)
+    void Engine::pressKey (int note, int velocity)
+    {
+        liftKey (note);                     // struck again: to the top, not in twice
+
+        if (heldCount < 128)
+        {
+            heldNote[heldCount]     = note;
+            heldVelocity[heldCount] = velocity;
+            ++heldCount;
+        }
+    }
+
+    void Engine::liftKey (int note)
+    {
+        for (int i = 0; i < heldCount; ++i)
+        {
+            if (heldNote[i] != note) continue;
+
+            for (int j = i + 1; j < heldCount; ++j)
+            {
+                heldNote[j - 1]     = heldNote[j];
+                heldVelocity[j - 1] = heldVelocity[j];
+            }
+
+            --heldCount;
+            return;
+        }
+    }
+
+    void Engine::startNote (int note, int velocity, bool legato)
     {
         if (audioPatch == nullptr)
             return;
 
         audioPatch->matching (note, velocity, matched);
+
+        const bool mono = voiceLimit == 1;
+        const double glideTime = glideSeconds.load (std::memory_order_relaxed);
+
+        /*
+         * Mono legato: the one voice is still held, playing this keygroup's sample, so move
+         * it to the new key instead of striking it again. The glide comes from the same
+         * per-keygroup memory as ever - which is this voice, as it sounds right now.
+         */
+        if (mono && legato && ! matched.empty())
+        {
+            const KeygroupPatch* kg = matched.front();
+            Voice& v = voices[0];
+
+            if (v.isHeld() && v.getKeygroupIndex() == kg->keygroupIndex && v.getSound() == kg->sound)
+            {
+                const double from       = glideOrigin (kg->keygroupIndex);
+                const double glideSemis = (glideOn && from >= 0.0) ? from - note : 0.0;
+
+                v.legatoTo (note, glideSemis, glideTime);
+
+                // A wide pair moves as one.
+                const int twin = v.getPartner();
+                if (twin > 0 && twin < Polyphony && voices[twin].getPartner() == 0)
+                    voices[twin].legatoTo (note, glideSemis, glideTime);
+
+                if (kg->keygroupIndex >= 0 && kg->keygroupIndex < GlideSlots)
+                {
+                    auto& memory    = glideFrom[kg->keygroupIndex];
+                    memory.pitch    = note;
+                    memory.voice    = 0;
+                    memory.sequence = v.getStartedAt();
+                }
+
+                return;
+            }
+        }
 
         /*
          * The positional crossfade needs every keygroup answering this note at once, so the
@@ -219,7 +299,11 @@ namespace s950
         {
             ++index;
 
-            const double fade = (audioPatch->positionalCrossfade && index < fadeCount)
+            // One voice, one keygroup - and at full level, since the crossfade is a balance
+            // between keygroups and there is no second one here to balance against.
+            if (mono && index > 0) break;
+
+            const double fade = (! mono && audioPatch->positionalCrossfade && index < fadeCount)
                                   ? cal::crossfadeGain (note, fadeLow, fadeHigh,
                                                         fadeCount, index)
                                   : 1.0;
@@ -254,10 +338,92 @@ namespace s950
              * from untrimmed settings would attack wrongly and click its way to the right
              * ones.
              */
+            /*
+             * Where this keygroup glides from - asked BEFORE take(), which may steal the very
+             * voice holding the answer. Per keygroup, so a layered programme's two keygroups
+             * each slide from their own last note, and a split never slides across itself.
+             */
+            const double from       = glideOrigin (kg->keygroupIndex);
+            const double glideSemis = (glideOn && from >= 0.0) ? from - note : 0.0;
+
+            /*
+             * A glide away from a note whose key is already up takes that note over, so its
+             * tail fades rather than ringing on beside the glide as a unison. See
+             * Voice::handOver. A note still held is left sounding: that is a chord.
+             */
+            if (glideSemis != 0.0 && glideTime > 0.0005
+                && kg->keygroupIndex >= 0 && kg->keygroupIndex < GlideSlots)
+            {
+                const auto& memory = glideFrom[kg->keygroupIndex];
+
+                if (memory.voice >= 0 && voices[memory.voice].isActive()
+                                      && ! voices[memory.voice].isHeld()
+                                      && voices[memory.voice].getStartedAt() == memory.sequence)
+                {
+                    voices[memory.voice].handOver();
+
+                    // and its twin, if it was wide: both halves were the one note
+                    const int twin = voices[memory.voice].getPartner();
+                    if (twin >= 0 && twin < Polyphony && voices[twin].getPartner() == memory.voice)
+                        voices[twin].handOver();
+                }
+            }
+
             Voice& v = take();
             v.setTrims (trims.read());
-            v.start (*kg, note, velocity, sampleRate, wheelCents, sequence++, fade);
+
+            const int first = static_cast<int> (&v - voices);
+
+            if (kg->keygroupIndex >= 0 && kg->keygroupIndex < GlideSlots)
+            {
+                auto& memory    = glideFrom[kg->keygroupIndex];
+                memory.pitch    = note;
+                memory.voice    = first;
+                memory.sequence = sequence;
+            }
+
+            v.start (*kg, note, velocity, sampleRate, wheelCents, sequence++, fade,
+                     glideSemis, glideTime);
+
+            /*
+             * Wide: the second half. take() cannot hand back `v` - it is the newest voice and
+             * held, and there are always at least two voices to choose from when wide is on -
+             * so this is always another voice. Started identically, then the pair is told
+             * which half is which. A drum is left single: it has no pitch to detune.
+             */
+            if (wideOn && ! kg->constantPitch)
+            {
+                Voice& w = take();
+                w.setTrims (trims.read());
+                w.start (*kg, note, velocity, sampleRate, wheelCents, sequence++, fade,
+                         glideSemis, glideTime);
+
+                const int second = static_cast<int> (&w - voices);
+                const bool offset = wideOffset.load (std::memory_order_relaxed);
+
+                v.makeWide (-1, second, false);
+                w.makeWide (+1, first,  offset);
+            }
         }
+    }
+
+    /*
+     * The last note this keygroup played, as it sounds NOW if its voice is still ours and
+     * still sounding - so a key struck mid-glide carries on from where the slide had got to
+     * rather than jumping back to where it began. Otherwise the last key struck in it.
+     */
+    double Engine::glideOrigin (int keygroupIndex) const
+    {
+        if (keygroupIndex < 0 || keygroupIndex >= GlideSlots)
+            return -1.0;
+
+        const auto& memory = glideFrom[keygroupIndex];
+
+        if (memory.voice >= 0 && voices[memory.voice].isActive()
+                              && voices[memory.voice].getStartedAt() == memory.sequence)
+            return voices[memory.voice].getPitchNow();
+
+        return memory.pitch;
     }
 
     /*
@@ -268,9 +434,48 @@ namespace s950
      */
     void Engine::stopNote (int note)
     {
-        for (auto& v : voices)
-            if (v.isActive() && v.getNote() == note && v.isHeld())
-                v.release();
+        /*
+         * Mono, letting go of the sounding key while others are still down: go back to the
+         * newest of those, the way a monosynth does - legato if it is in the same keygroup,
+         * gliding if glide is on, struck afresh at its own velocity if it is not.
+         */
+        int from = 0;
+
+        if (voiceLimit == 1 && heldCount > 0 && voices[0].isHeld() && voices[0].getNote() == note)
+        {
+            startNote (heldNote[heldCount - 1], heldVelocity[heldCount - 1], true);
+            from = 1;                       // voice 0 now plays the held key: leave it be
+        }
+
+        for (int i = from; i < Polyphony; ++i)
+            if (voices[i].isActive() && voices[i].getNote() == note && voices[i].isHeld())
+                releaseVoice (i);
+    }
+
+    /*
+     * Let one voice go - and if it was still gliding, forget it as a place to glide from.
+     *
+     * A glide abandoned half way has no pitch worth starting from: the next note in that
+     * keygroup plays at its own pitch, as though nothing had gone before. A glide that had
+     * already ARRIVED is a finished note, and the next one still slides from it as usual.
+     *
+     * Only when this voice is the one the keygroup remembers. Letting go of an older note
+     * of a chord says nothing about where the keygroup's line has got to.
+     */
+    void Engine::releaseVoice (int i)
+    {
+        Voice& v = voices[i];
+
+        if (v.isHeld() && v.isGliding())
+        {
+            const int k = v.getKeygroupIndex();
+
+            if (k >= 0 && k < GlideSlots && glideFrom[k].voice == i
+                       && glideFrom[k].sequence == v.getStartedAt())
+                glideFrom[k] = GlideMemory {};
+        }
+
+        v.release();
     }
 
     /*
@@ -286,11 +491,16 @@ namespace s950
      */
     Voice& Engine::take()
     {
-        for (auto& v : voices)
-            if (! v.isActive()) return v;
+        // Only the first so many voices are ever handed out: one per note allowed, or two
+        // when wide. Mono always plays voice 0 (and 1, wide), which is what lets startNote
+        // find the note it may move legato.
+        const int limit = std::min (Polyphony, getNoteLimit() * (wideOn ? 2 : 1));
+
+        for (int i = 0; i < limit; ++i)
+            if (! voices[i].isActive()) return voices[i];
 
         int pick = -1;
-        for (int i = 0; i < Polyphony; ++i)
+        for (int i = 0; i < limit; ++i)
         {
             if (voices[i].isHeld()) continue;                 // still down: leave it
             if (pick < 0 || voices[i].getStartedAt() < voices[pick].getStartedAt()) pick = i;
@@ -299,12 +509,23 @@ namespace s950
         if (pick < 0)
         {
             pick = 0;
-            for (int i = 1; i < Polyphony; ++i)
+            for (int i = 1; i < limit; ++i)
                 if (voices[i].getStartedAt() < voices[pick].getStartedAt()) pick = i;
         }
 
-        voices[pick].kill();
+        killPair (pick);
         return voices[pick];
+    }
+
+    void Engine::killPair (int i)
+    {
+        const int twin = voices[i].getPartner();
+
+        // Only a twin that still points back: a voice restarted since is no longer its pair.
+        if (twin >= 0 && twin < Polyphony && voices[twin].getPartner() == i)
+            voices[twin].kill();
+
+        voices[i].kill();
     }
 
     int Engine::getActiveVoices() const
@@ -339,11 +560,17 @@ namespace s950
         const double bendNow =
             cal::bendRatio (bend14, bendRange.load (std::memory_order_relaxed));
 
+        // Wide's detune and spread, like the trims: once per stretch, so a knob reaches
+        // notes already sounding. Voices that are not half of a pair ignore them.
+        const double cents  = wideCents.load (std::memory_order_relaxed);
+        const double spread = wideSpread.load (std::memory_order_relaxed);
+
         for (auto& v : voices)
             if (v.isActive())
             {
                 v.setTrims (now);
                 v.setBend (bendNow);
+                v.setWide (cents, spread);
                 v.render (left, right, count, sharedPhase);
             }
 

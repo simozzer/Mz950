@@ -8,6 +8,46 @@ assumption it says that too — those are the ones another afternoon with a reco
 
 ## Unreleased
 
+### Glide (portamento) — new, and not a feature of the S950
+
+The plugin's first control that the machine never had. It is off by default, so nothing about
+how a programme sounds changes until it is switched on. **CC 65** switches it (64 and up is
+on) and **CC 5** sets the time. Both are General MIDI's portamento controllers. The switch
+lands on the sample the host puts it at, so a sequenced line can toggle it between two notes.
+
+- Constant time whatever the interval, straight in semitones. CC 5 at 0 is no glide and at
+  127 is three seconds. The default is 120 ms.
+- Only within a keygroup. A note glides from the last note played in its own keygroup, or
+  from wherever that note had reached if it was still gliding. Crossing into another
+  keygroup does not glide, and changing programme forgets every keygroup's last note.
+- Letting go of a key mid-glide stops the slide where it stands, and the next note in that
+  keygroup plays at its own pitch. A glide that had already arrived still leads on to the
+  next note.
+- Constant-pitch keygroups ignore it, as they ignore the key.
+- A glide away from a note whose key is already up takes that note over: its release fades
+  in 10 ms instead of ringing on. It used to leave two copies of one sample at nearly one
+  pitch, heard as a unison thickening on lines of single notes whenever polyphony was above 1.
+- Plugin only. The C# engine and AkaiS950Studio do not have it.
+
+### Wide — new, and not the S950's
+
+Every note as a detuned pair: flat and left, sharp and right, by the same amount, centred on
+the true pitch and as loud as one voice (equal-power, −3 dB a half). **CC 107** on/off,
+**108** detune (±0–50 cents, default 10), **110** spread (0–100%, default 70), **111**
+offset start (the sharp half begins 7 ms in so the attack doesn't flange; on by default).
+Mono and poly. At most **four notes**, since each note uses two of the S950's eight voices,
+and pairs are stolen whole. Constant-pitch keygroups are left single.
+
+### Polyphony limit and mono mode — new, and also not the S950's
+
+**Polyphony** (1 to 8, on **CC 106** in bands of 16) caps how many notes can sound at once, so
+at 1 no chord can be played. It is a limit, not a unison stack. At 1 the plugin is
+mono and plays like a monosynth. Legato within a keygroup moves the sounding note without
+restarting it, gliding if glide is on. Letting go returns to the newest key still held.
+Detached notes and notes in another keygroup start fresh. A layered programme sounds only its
+first keygroup in mono. Voices sounding above a lowered limit finish rather than being cut.
+The editor's voice readout shows the limit.
+
 ## v0.4.0 — 2026-09-26
 
 ### Every calibration recording before this release was going through a limiter

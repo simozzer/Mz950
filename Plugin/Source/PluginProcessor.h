@@ -202,6 +202,38 @@ private:
     std::atomic<float>* bendRangeParameter = nullptr;
 
     /*
+     * Portamento, which the machine never had - see Engine::glide.
+     *
+     * Not rows in trimControls: those are offsets that land in the engine's trims, and these
+     * are an absolute switch and an absolute time with nothing on the disk to offset.
+     */
+    std::atomic<float>*         glideParameter     = nullptr;
+    std::atomic<float>*         glideTimeParameter = nullptr;
+    juce::RangedAudioParameter* glideControl       = nullptr;
+    juce::RangedAudioParameter* glideTimeControl   = nullptr;
+
+    /// What the engine was last told glide is: 0, 1, or -1 for not yet. Audio thread only.
+    int glidePosted = -1;
+
+    /// The voice count, 1..8 (1 is mono), and what the engine was last told it is.
+    std::atomic<float>*         voicesParameter = nullptr;
+    juce::RangedAudioParameter* voicesControl   = nullptr;
+    int                         voicesPosted    = -1;
+
+    /// Wide, which the machine never had either - see Engine::wide.
+    std::atomic<float>*         wideParameter       = nullptr;
+    std::atomic<float>*         wideDetuneParameter = nullptr;
+    std::atomic<float>*         wideSpreadParameter = nullptr;
+    std::atomic<float>*         wideOffsetParameter = nullptr;
+    juce::RangedAudioParameter* wideControl         = nullptr;
+    juce::RangedAudioParameter* wideDetuneControl   = nullptr;
+    juce::RangedAudioParameter* wideSpreadControl   = nullptr;
+    juce::RangedAudioParameter* wideOffsetControl   = nullptr;
+    int                         widePosted          = -1;
+
+    void applySwitch (juce::RangedAudioParameter* p, bool on);
+
+    /*
      * One player's control: a parameter, the continuous controller that moves it, and the
      * engine field it ends up in.
      *
