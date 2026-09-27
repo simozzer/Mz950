@@ -277,6 +277,76 @@ namespace s950
         /// True if an S900 left this keygroup's filter envelope blank.
         bool vcfBlank (const Entry& program, int keygroup) const;
 
+        // ------------------------------------------------------------- making a disk
+
+        /*
+         * The second kind of writing: building a disk from nothing.
+         *
+         * A blank S950 disk is 800K of zeroes - an empty directory and an empty allocation
+         * table ARE the format's idea of formatted - and onto it go samples and programmes,
+         * in that order of concern: samples first, so their RAM addresses follow on from one
+         * another in directory order, then programmes, which are put BEFORE them in the
+         * directory so the P / S grouping every library disk has survives.
+         *
+         * This is the C# library's AddSample / AddProgram / RebuildPointers, ported, and it
+         * is what makes the plugin's Synth page an S950 rather than a synthesiser: a sound
+         * designed there is a disk, and a disk goes to the real machine. The C# path has
+         * been played on one; this port is held to it by reading its disks with both readers.
+         *
+         * Every rule the hardware turned out to care about is here:
+         *   - the directory is contiguous, or the machine reads to the first gap and stops;
+         *   - a zone's pointer is the sample's POSITION, table + 70 x index, not an address;
+         *   - the programme header restates the layout - where its keygroups load and how
+         *     many there are - and the machine believes the header;
+         * and rebuildPointers() derives all of them from the directory rather than shifting
+         * anything, which is the only way they cannot drift.
+         */
+
+        /// 800K of nothing, ready to be written to.
+        static Disk blank (std::string name = "NEW DISK");
+
+        struct NewSample
+        {
+            std::string        name;
+            std::vector<short> words12;        // signed, -2048..2047; an odd last word is dropped
+            int  rate     = 40000;
+            int  rootNote = 60;                // the key it plays at its own rate on
+            int  fine     = 0;
+            char loopMode = 'L';               // 'L' looped, 'O' one-shot, 'A' alternating
+            int  loopLength = -1;              // words; -1 is the whole sample
+        };
+
+        /// Add a sample after the last one. False, with `error`, if the disk is full or
+        /// the name is taken.
+        bool addSample (const NewSample& s, std::string& error);
+
+        /*
+         * Add a programme of `keygroups` template keygroups, each across the whole
+         * keyboard with an empty second zone, after the last programme. The caller then
+         * shapes them with setKeygroupParam and setZoneSample, and calls rebuildPointers()
+         * once when the disk is complete.
+         */
+        bool addProgram (const std::string& name, int keygroups, std::string& error);
+
+        /// Name the sample a keygroup's zone plays (0 soft, 1 hard). Its pointer follows.
+        bool setZoneSample (const Entry& program, int keygroup, int zone, const std::string& sample);
+
+        /*
+         * Rewrite every chain pointer, zone pointer and programme header from the
+         * directory. Returns how many bytes changed. Call after adding anything; it is
+         * what the C# calls after every structural edit, and what the machine needs.
+         */
+        int rebuildPointers();
+
+        /// The entry in a directory slot, or nullptr.
+        const Entry* entryInSlot (int slot) const;
+
+        /// A sample's position among the samples, in directory order, or -1.
+        int sampleIndex (const std::string& name) const;
+
+        /// The name a file of this name would be given: up to 10 characters, upper-cased.
+        static std::string normaliseNameFor (const std::string& name);
+
         /// Bumped by every write, so a caller can tell a disk has changed since it looked.
         int getRevision() const { return revision; }
 
@@ -287,6 +357,29 @@ namespace s950
     private:
         /// Byte `offset` of a file, through its chain. False past the end of the file.
         bool fileByteAt (const Entry& e, int offset, std::size_t& at) const;
+
+        // the writing half's helpers
+        static std::string normaliseName (const std::string& name);
+        bool addFile (const std::string& name, char type, const std::vector<unsigned char>& contents,
+                      int minSlot, int& slotOut, std::string& error);
+        void makeRoomAt (int slot);
+        void setFat (int block, int value);
+        void putU16 (std::size_t at, unsigned value);
+        void pokeFile (const Entry& e, int offset, unsigned char value);
+
+        /// The keygroup arena: where each programme's records start, and how many there are.
+        int  arenaBase() const;
+        int  arenaRecords (std::vector<std::pair<int, int>>& firstBySlot) const;
+        int  sampleTableAddress() const;
+        int  chainOf (const std::vector<unsigned char>& program, int keygroup) const;
+
+        mutable int arenaBaseCache = -1;
+
+        static constexpr int SampleRamBase      = 0x18000;
+        static constexpr int LoopDescriptorBase = 0xB6F4;
+        static constexpr int ArenaDefault       = 0xC5F6;
+        static constexpr int KeygroupChainOffset = 68;
+        static constexpr int MaxKeygroups       = 64;
 
         int revision = 0;
 
@@ -305,6 +398,9 @@ namespace s950
 
         /// One sample, decoded and normalised, ready for a voice to read.
         SoundPtr soundFor (const Entry& sample) const;
+
+        /// A hash of a sample file's bytes. See Sound::fingerprint.
+        unsigned long long fingerprintOf (const Entry& sample) const;
 
         std::string                source;
         std::vector<unsigned char> image;

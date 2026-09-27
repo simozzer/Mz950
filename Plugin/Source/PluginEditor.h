@@ -4,6 +4,8 @@
 
 #include "PluginProcessor.h"
 #include "ProgramPage.h"
+#include "SynthPage.h"
+#include "Look.h"
 
 #include <memory>
 #include <vector>
@@ -115,6 +117,12 @@ public:
 private:
     void timerCallback() override;
 
+    /*
+     * First, so it is destroyed LAST: every component below looks its colours and fonts up
+     * here, and the destructor unhooks it before any of them goes. See Look.h for what it is.
+     */
+    look::Mz950LookAndFeel lookAndFeel;
+
     VirtualS950Processor& processor;
 
     /*
@@ -127,6 +135,7 @@ private:
      */
     juce::TabbedButtonBar mainTabs { juce::TabbedButtonBar::TabsAtTop };
     ProgramPage           programPage { processor };
+    SynthPage             synthPage   { processor };
     juce::Label           performHeading;
 
     void changeListenerCallback (juce::ChangeBroadcaster*) override { showTab (mainTabs.getCurrentTabIndex()); }
@@ -192,7 +201,18 @@ private:
     EnvelopeEditor vcaEnvelope { processor, false };
     EnvelopeEditor vcfEnvelope { processor, true  };
 
-    juce::Label  vcaHeading, vcfHeading, sampleHeading, lfoHeading, velocityHeading;
+    /*
+     * The Perform tab's panels. Cyan for the offsets, violet for the extras - the colours
+     * Look.h gives those two kinds - with the controller numbers in each panel's corner,
+     * where somebody mapping a keyboard would look for them.
+     */
+    look::Panel filterPanel   { "FILTER",   look::perform, "offset  -  CC 74" };
+    look::Panel lfoPanel      { "LFO",      look::perform, "offsets  -  CC 76 77 78" };
+    look::Panel velocityPanel { "VELOCITY", look::perform, "offsets  -  CC 109 112" };
+    look::Panel vcaPanel      { "VCA ENVELOPE", look::perform, "offsets  -  CC 73 75 79 72" };
+    look::Panel vcfPanel      { "VCF ENVELOPE", look::perform, "offsets  -  CC 102-105, 70" };
+    look::Panel glidePanel    { "GLIDE & POLYPHONY", look::extra, "not on the S950  -  CC 65 5 106" };
+    look::Panel widePanel     { "WIDE",             look::extra, "not on the S950  -  CC 107 108 110 111" };
 
     /*
      * Portamento, which the S950 never had.
@@ -200,7 +220,7 @@ private:
      * Not in `knobs`: those are all offsets from the disk, with tooltips and double-clicks
      * that say so, and neither of these is. The switch is a button because it is a switch.
      */
-    juce::Label        glideHeading, glideTimeLabel;
+    juce::Label        glideTimeLabel;
     juce::ToggleButton glideButton { "On" };
     juce::Slider       glideTime { juce::Slider::RotaryHorizontalVerticalDrag,
                                    juce::Slider::TextBoxBelow };
@@ -217,9 +237,9 @@ private:
     /*
      * Wide, which the S950 never had: its own row, headed as an addition like glide's.
      */
-    juce::Label        wideHeading, wideDetuneLabel, wideSpreadLabel;
+    juce::Label        wideDetuneLabel, wideSpreadLabel;
     juce::ToggleButton wideButton   { "On" };
-    juce::ToggleButton offsetButton { "Offset start" };
+    juce::ToggleButton offsetButton { "Offset" };     // "Offset start" did not fit its cell
     juce::Slider       wideDetune { juce::Slider::RotaryHorizontalVerticalDrag,
                                     juce::Slider::TextBoxBelow };
     juce::Slider       wideSpread { juce::Slider::RotaryHorizontalVerticalDrag,
@@ -239,6 +259,13 @@ private:
     std::unique_ptr<juce::FileChooser> chooser;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> gainAttachment;
+
+    /*
+     * Tooltips need a window to appear in, and there was none: every control in here had a
+     * tooltip that nothing ever showed. Parented to the editor, so the tip stays inside the
+     * plugin's own window rather than appearing as a desktop window a host may put behind.
+     */
+    juce::TooltipWindow tooltips { this, 600 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VirtualS950Editor)
 };

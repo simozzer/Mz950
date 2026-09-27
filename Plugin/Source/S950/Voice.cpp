@@ -13,7 +13,8 @@ namespace s950
         wideRatio     = 1.0;
         wideGainL     = 1.0;
         wideGainR     = 1.0;
-        kg            = &group;
+        own           = group;
+        kg            = &own;
         sound         = group.sound;
         note          = n;
         velocity      = vel < 0 ? 0 : (vel > 127 ? 127 : vel);
@@ -98,7 +99,8 @@ namespace s950
         if (stage == Stage::idle)     return;
         if (group.sound != sound)     return;   // a different sample is a different note
 
-        kg = &group;
+        own = group;
+        kg  = &own;
 
         // --- pitch. Changing transpose moves the playback rate under the position we
         // already hold, which is what transposing a sounding note means.

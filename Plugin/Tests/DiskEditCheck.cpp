@@ -20,6 +20,7 @@
  */
 
 #include "Disk.h"
+#include "SynthPatch.h"
 
 #include <cstdio>
 #include <fstream>
@@ -254,6 +255,274 @@ int main (int argc, char** argv)
             ++checks;
             if (after->keygroups[i].sound != before->keygroups[i].sound)
                 fail (e.name, "a rebuild decoded a sample afresh", 0, 1);
+        }
+    }
+
+    // ------------------------------------------------------------- making a disk
+
+    /*
+     * A disk from nothing: three samples, two programmes, zones pointing at the samples.
+     * Every derived field is checked against the rules the hardware turned out to care
+     * about - contiguous directory, the arena layout, the header restating it, zone
+     * pointers as positions - and the image is saved for crosscheck.ps1 to read with the
+     * C# library, which is the reader that has produced disks a real S950 played.
+     */
+    std::printf ("  making a disk from nothing\n");
+    {
+        Disk d = Disk::blank ("BUILT");
+        std::string why;
+
+        auto sawWords = [] (int n)
+        {
+            std::vector<short> w (static_cast<std::size_t> (n));
+            for (int i = 0; i < n; ++i)
+                w[static_cast<std::size_t> (i)] = static_cast<short> (-2048 + (4095 * (i % 153)) / 152);
+            return w;
+        };
+
+        Disk::NewSample saw;  saw.name  = "saw";  saw.words12  = sawWords (1223);  saw.rate  = 40000;   // odd: last word dropped
+        Disk::NewSample kick; kick.name = "kick"; kick.words12 = sawWords (6000);  kick.rate = 20000; kick.loopMode = 'O'; kick.rootNote = 36;
+        Disk::NewSample big;  big.name  = "long"; big.words12  = sawWords (140000); big.rate = 20000;  // over a 128K page
+
+        ++checks; if (! d.addSample (saw,  why)) fail ("built", why.c_str(), 0, 1);
+        ++checks; if (! d.addSample (kick, why)) fail ("built", why.c_str(), 0, 1);
+        ++checks; if (! d.addSample (big,  why)) fail ("built", why.c_str(), 0, 1);
+
+        ++checks; if (! d.addProgram ("lead", 2, why)) fail ("built", why.c_str(), 0, 1);
+        ++checks; if (! d.addProgram ("kit",  1, why)) fail ("built", why.c_str(), 0, 1);
+
+        // a duplicate name within a type is refused, and the disk is untouched by it
+        ++checks;
+        if (d.addSample (saw, why)) fail ("built", "a second SAW was allowed", 1, 0);
+
+        const auto& es = d.getEntries();
+        ++checks;
+        if (es.size() != 5) { fail ("built", "five entries", static_cast<int> (es.size()), 5); return 1; }
+
+        // programmes first, then samples, in slots 0..4 with no gap
+        const char order[] = { 'P', 'P', 'S', 'S', 'S' };
+        for (int i = 0; i < 5; ++i)
+        {
+            ++checks;
+            if (es[static_cast<std::size_t> (i)].slot != i || es[static_cast<std::size_t> (i)].type != order[i])
+                fail ("built", "directory order and contiguity", es[static_cast<std::size_t> (i)].slot, i);
+        }
+
+        const Disk::Entry* lead = d.find ("LEAD", 'P');
+        const Disk::Entry* kit  = d.find ("KIT",  'P');
+        const Disk::Entry* sawE = d.find ("SAW",  'S');
+        const Disk::Entry* kkE  = d.find ("KICK", 'S');
+        const Disk::Entry* bigE = d.find ("LONG", 'S');
+
+        ++checks;
+        if (! lead || ! kit || ! sawE || ! kkE || ! bigE) { fail ("built", "every file found by name", 0, 1); return 1; }
+
+        ++checks; if (sawE->sampleCount != 1222)   fail ("built", "SAW words (odd one dropped)", static_cast<int> (sawE->sampleCount), 1222);
+        ++checks; if (sawE->sampleRate  != 40000)  fail ("built", "SAW rate", sawE->sampleRate, 40000);
+        ++checks; if (sawE->loopMode    != 'L')    fail ("built", "SAW looped", sawE->loopMode, 'L');
+        ++checks; if (kkE->loopMode     != 'O')    fail ("built", "KICK one-shot", kkE->loopMode, 'O');
+        ++checks; if (sawE->loopLength  != 1222)   fail ("built", "SAW loop is the whole sample", static_cast<int> (sawE->loopLength), 1222);
+
+        // the audio round-trips through the 12-bit packing exactly
+        auto same = [&] (const Disk::Entry& e, const std::vector<short>& want, const char* what)
+        {
+            const auto got = d.sampleWords12 (e);
+            const std::size_t n = want.size() & ~static_cast<std::size_t> (1);
+            ++checks;
+            if (got.size() != n) { fail ("built", what, static_cast<int> (got.size()), static_cast<int> (n)); return; }
+            for (std::size_t i = 0; i < n; ++i)
+                if (got[i] != want[i]) { fail ("built", what, got[i], want[i]); return; }
+        };
+        same (*sawE, saw.words12,  "SAW audio round-trips");
+        same (*kkE,  kick.words12, "KICK audio round-trips");
+        same (*bigE, big.words12,  "LONG audio round-trips");
+
+        // sample RAM and loop descriptors follow on from one sample to the next
+        auto header = [&] (const Disk::Entry& e, int at) { return static_cast<int> (d.getImage()[static_cast<std::size_t> (e.startBlock * Disk::BlockSize + at)]); };
+        auto mem = [&] (const Disk::Entry& e) { return header (e, 0x36) | (header (e, 0x37) << 8) | (header (e, 0x38) << 16); };
+        auto lp  = [&] (const Disk::Entry& e) { return header (e, 0x28) | (header (e, 0x29) << 8); };
+
+        ++checks; if (mem (*sawE) != 0x18000)          fail ("built", "first sample at the RAM base", mem (*sawE), 0x18000);
+        ++checks; if (mem (*kkE)  != 0x18000 + 2448)   fail ("built", "second follows: 1222 words in sixteens", mem (*kkE), 0x18000 + 2448);
+        ++checks; if (mem (*bigE) != 0x18000 + 2448 + 12000) fail ("built", "third follows", mem (*bigE), 0x18000 + 2448 + 12000);
+        ++checks; if (lp (*sawE)  != 0xB6F4)           fail ("built", "first loop descriptor", lp (*sawE), 0xB6F4);
+        ++checks; if (lp (*kkE)   != 0xB6F4 + 30)      fail ("built", "a looped sample takes three", lp (*kkE), 0xB6F4 + 30);
+        ++checks; if (lp (*bigE)  != 0xB6F4 + 30 + 20) fail ("built", "a one-shot takes two", lp (*bigE), 0xB6F4 + 50);
+
+        // zones, then the arena
+        ++checks; if (! d.setZoneSample (*lead, 0, 0, "SAW"))  fail ("built", "zone SAW", 0, 1);
+        ++checks; if (! d.setZoneSample (*lead, 1, 0, "LONG")) fail ("built", "zone LONG", 0, 1);
+        ++checks; if (! d.setZoneSample (*kit,  0, 0, "KICK")) fail ("built", "zone KICK", 0, 1);
+        ++checks; if (d.setZoneSample (*kit, 1, 0, "KICK"))    fail ("built", "no third keygroup to name", 1, 0);
+
+        d.setKeygroupParam (*kit, 0, KeygroupParam::ConstantPitch, 1);
+        d.setKeygroupParam (*kit, 0, KeygroupParam::OneShot, 1);
+        d.setKeygroupParam (*kit, 0, KeygroupParam::LowKey, 36);
+        d.setKeygroupParam (*kit, 0, KeygroupParam::HighKey, 36);
+
+        d.rebuildPointers();
+        ++checks;
+        if (d.rebuildPointers() != 0) fail ("built", "a second rebuild changes nothing", 1, 0);
+
+        /*
+         * LEAD has two keygroups, KIT one. Records: LEAD at 0 and 1, an empty record at 2,
+         * KIT at 3; the table starts at record 4. The arena of a fresh disk is 0xC5F6.
+         */
+        const int arena = 0xC5F6, table = arena + 70 * 4;
+        const auto leadRaw = d.readFile (*lead);
+        const auto kitRaw  = d.readFile (*kit);
+        auto u16 = [] (const std::vector<unsigned char>& b, int at) { return static_cast<int> (b[static_cast<std::size_t> (at)]) | (static_cast<int> (b[static_cast<std::size_t> (at) + 1]) << 8); };
+
+        ++checks; if (u16 (leadRaw, 18) != arena)          fail ("built", "LEAD loads at the arena", u16 (leadRaw, 18), arena);
+        ++checks; if (leadRaw[23] != 2)                    fail ("built", "LEAD header counts two", leadRaw[23], 2);
+        ++checks; if (u16 (kitRaw, 18) != arena + 70 * 3)  fail ("built", "KIT loads after the empty record", u16 (kitRaw, 18), arena + 210);
+        ++checks; if (kitRaw[23] != 1)                     fail ("built", "KIT header counts one", kitRaw[23], 1);
+
+        ++checks; if (u16 (leadRaw, 38 + 68) != arena + 70)      fail ("built", "LEAD kg0 chains to kg1", u16 (leadRaw, 38 + 68), arena + 70);
+        ++checks; if (u16 (leadRaw, 38 + 70 + 68) != 0)          fail ("built", "LEAD kg1 ends the chain", u16 (leadRaw, 38 + 70 + 68), 0);
+        ++checks; if (u16 (kitRaw, 38 + 68) != 0)                fail ("built", "KIT kg0 ends the chain", u16 (kitRaw, 38 + 68), 0);
+
+        ++checks; if (u16 (leadRaw, 38 + 40) != table)           fail ("built", "SAW is sample 0", u16 (leadRaw, 38 + 40), table);
+        ++checks; if (u16 (leadRaw, 38 + 70 + 40) != table + 140) fail ("built", "LONG is sample 2", u16 (leadRaw, 38 + 70 + 40), table + 140);
+        ++checks; if (u16 (kitRaw, 38 + 40) != table + 70)       fail ("built", "KICK is sample 1", u16 (kitRaw, 38 + 40), table + 70);
+        ++checks; if (u16 (leadRaw, 38 + 62) != 0)               fail ("built", "an empty zone points nowhere", u16 (leadRaw, 38 + 62), 0);
+
+        // and the engine can play it
+        auto patch = d.buildPatch (*lead);
+        ++checks;
+        if (patch == nullptr || patch->keygroups.size() != 2 || patch->keygroups[0].sound == nullptr
+            || patch->keygroups[1].sound == nullptr)
+            fail ("built", "LEAD plays two keygroups with sounds", 0, 2);
+
+        auto kitPatch = d.buildPatch (*kit);
+        ++checks;
+        if (kitPatch == nullptr || kitPatch->keygroups.size() != 1 || ! kitPatch->keygroups[0].constantPitch
+            || ! kitPatch->keygroups[0].oneShot || kitPatch->keygroups[0].lowKey != 36)
+            fail ("built", "KIT is a one-shot drum on 36", 0, 1);
+
+        if (argc >= 4)
+        {
+            std::ofstream out (argv[3], std::ios::binary);
+            const auto& image = d.getImage();
+            out.write (reinterpret_cast<const char*> (image.data()), static_cast<std::streamsize> (image.size()));
+            std::printf ("  built disk written to %s\n", argv[3]);
+        }
+    }
+
+    // ------------------------------------------------------------- a synth disk
+
+    /*
+     * A recipe rendered to a disk: two oscillators and the drums. The layout it must have
+     * - the oscillators layered from the synth's low key up, each drum one key wide on its
+     * General MIDI note, constant pitch and one-shot - and the rule that a Program tab edit
+     * survives a re-render, which is what makes the two tabs one instrument.
+     */
+    std::printf ("  a synth disk\n");
+    {
+        using namespace s950::synth;
+
+        Recipe r = presets()[1].recipe;             // the fat saw: two detuned saws
+        r.drumsOn = true;
+        r.drums[static_cast<int> (DrumSlot::ride)].on = false;
+
+        WaveCache cache;
+        Disk d;
+        std::string why;
+
+        ++checks;
+        if (! render (r, cache, nullptr, d, why)) { fail ("synth", why.c_str(), 0, 1); return 1; }
+
+        int programCount = 0, samples = 0;
+        for (const auto& e : d.getEntries()) { if (e.type == 'P') ++programCount; if (e.type == 'S') ++samples; }
+
+        ++checks; if (programCount != 1)   fail ("synth", "one programme", programCount, 1);
+        ++checks; if (samples != 2 + 8)    fail ("synth", "two waves and eight drums", samples, 10);
+
+        const Disk::Entry* prog = d.find ("FAT SAW", 'P');
+        ++checks;
+        if (prog == nullptr) { fail ("synth", "the programme is named for the recipe", 0, 1); return 1; }
+
+        const auto groups = d.keygroups (*prog);
+        ++checks; if (groups.size() != 10) { fail ("synth", "a keygroup per layer", (int) groups.size(), 10); return 1; }
+
+        // the oscillators: whole synth range, tuned, not constant pitch
+        ++checks; if (groups[0].zone1.name != "OSC1" || groups[1].zone1.name != "OSC2") fail ("synth", "OSC1 and OSC2 first", 0, 1);
+        ++checks; if (groups[0].lowKey != Recipe::SynthLowKeyWithDrums || groups[0].highKey != 127) fail ("synth", "OSC1 spans the synth range", groups[0].lowKey, Recipe::SynthLowKeyWithDrums);
+        ++checks; if (groups[0].constantPitch() || groups[0].oneShot()) fail ("synth", "an oscillator tracks the key", 1, 0);
+
+        // a flat detune of four cents is a semitone down and 246 256ths back up
+        ++checks; if (groups[0].zone1.transpose != -1 || groups[0].zone1.fine != 246) fail ("synth", "OSC1 -4 cents", groups[0].zone1.fine, 246);
+        ++checks; if (groups[1].zone1.transpose != 0  || groups[1].zone1.fine != 10)  fail ("synth", "OSC2 +4 cents", groups[1].zone1.fine, 10);
+
+        // the drums: one key each on GM's notes, constant pitch, one-shot, and the ride left out
+        bool sawRide = false;
+        for (std::size_t k = 2; k < groups.size(); ++k)
+        {
+            const auto& g = groups[k];
+            ++checks; if (g.lowKey != g.highKey)             fail ("synth", "a drum is one key wide", g.highKey, g.lowKey);
+            ++checks; if (! g.constantPitch() || ! g.oneShot()) fail ("synth", "a drum is constant pitch, one-shot", 0, 1);
+            if (g.zone1.name == "RIDE") sawRide = true;
+        }
+        ++checks; if (sawRide) fail ("synth", "a drum switched off is not on the disk", 1, 0);
+
+        const Disk::Entry* kick = d.find ("KICK 1", 'S');
+        ++checks; if (kick == nullptr || kick->loopMode != 'O') fail ("synth", "KICK 1 is a one-shot", 0, 1);
+        int kickKg = -1;
+        for (std::size_t k = 0; k < groups.size(); ++k) if (groups[k].zone1.name == "KICK 1") kickKg = (int) k;
+        ++checks; if (kickKg < 0 || groups[(std::size_t) kickKg].lowKey != 36) fail ("synth", "the kick is on 36", kickKg < 0 ? -1 : groups[(std::size_t) kickKg].lowKey, 36);
+
+        // it plays
+        auto patch = d.buildPatch (*prog);
+        ++checks; if (patch == nullptr || patch->keygroups.size() != 10) fail ("synth", "the engine builds all ten", patch ? (int) patch->keygroups.size() : 0, 10);
+
+        // A Program tab edit survives a re-render: change OSC1's decay on the disk, render
+        // again with a different level and a different OSC1 wave, and the decay is still
+        // there while the level moved.
+        d.setKeygroupParam (*prog, 0, KeygroupParam::VcaDecay, 77);
+        r.osc[0].level = 50;
+        r.osc[0].intensity = 20;                    // a different wave under the same name
+
+        Disk again;
+        ++checks;
+        if (! render (r, cache, &d, again, why)) { fail ("synth", why.c_str(), 0, 1); return 1; }
+        const Disk::Entry* prog2 = again.find ("FAT SAW", 'P');
+        ++checks; if (prog2 == nullptr) { fail ("synth", "re-rendered programme", 0, 1); return 1; }
+        ++checks; if (again.getKeygroupParam (*prog2, 0, KeygroupParam::VcaDecay) != 77) fail ("synth", "a Program tab edit survives a re-render", again.getKeygroupParam (*prog2, 0, KeygroupParam::VcaDecay), 77);
+        ++checks; if (again.getKeygroupParam (*prog2, 0, KeygroupParam::Zone1Loudness) != -25) fail ("synth", "and the recipe's own knob moved", again.getKeygroupParam (*prog2, 0, KeygroupParam::Zone1Loudness), -25);
+
+        // the cache did its job: three oscillator waves (OSC1 twice), eight drums
+        ++checks; if (cache.waves.size() != 11) fail ("synth", "the wave cache holds each wave once", (int) cache.waves.size(), 11);
+
+        // Rebuilding the patch from the new disk reuses the samples whose bytes did not
+        // change - OSC2 and the drums - and decodes afresh the one that did, OSC1, though
+        // its name is the same. That is what keeps a held note following an edit.
+        {
+            auto before = d.buildPatch (*prog);
+            auto after  = again.buildPatch (*prog2, before.get());
+            ++checks;
+            if (before == nullptr || after == nullptr || after->keygroups.size() != before->keygroups.size())
+                fail ("synth", "both patches build", 0, 1);
+            else
+            {
+                ++checks; if (after->keygroups[0].sound == before->keygroups[0].sound) fail ("synth", "a re-rendered OSC1 is a new sound", 1, 0);
+                ++checks; if (after->keygroups[1].sound != before->keygroups[1].sound) fail ("synth", "an unchanged OSC2 is the same sound", 0, 1);
+                ++checks; if (after->keygroups[2].sound != before->keygroups[2].sound) fail ("synth", "an unchanged drum is the same sound", 0, 1);
+            }
+        }
+
+        // text and back
+        const auto back = fromText (toText (r));
+        ++checks; if (toText (back) != toText (r)) fail ("synth", "the recipe survives being text", 0, 1);
+
+        if (argc >= 4)
+        {
+            std::string path = argv[3];
+            const auto dot = path.rfind ('.');
+            path = (dot == std::string::npos ? path : path.substr (0, dot)) + "-synth.img";
+            std::ofstream out (path, std::ios::binary);
+            const auto& image = again.getImage();
+            out.write (reinterpret_cast<const char*> (image.data()), static_cast<std::streamsize> (image.size()));
+            std::printf ("  synth disk written to %s\n", path.c_str());
         }
     }
 

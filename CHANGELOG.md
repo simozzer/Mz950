@@ -8,6 +8,85 @@ assumption it says that too — those are the ones another afternoon with a reco
 
 ## Unreleased
 
+### A SYNTH tab: sounds with no disk, made as a disk
+
+The plugin can now make its own sounds, and it makes them the S950's way: every oscillator
+is drawn as a band-limited looped sample, every drum as a one-shot, and the lot is written
+to a blank disk held in memory that then becomes the loaded disk. So a sound designed on
+the Synth tab goes through the real voice (filter, envelopes, LFO, warp), the Program tab
+edits it, Glide and Wide work on it, the set saves it, and *Save disk as…* puts it on a
+floppy for a real S950.
+
+- **Three oscillators**, each a keygroup layered across the keyboard: sine, triangle, saw,
+  square, pulse, organ, glass, buzz, hollow, FM at 1:1, 1:2 and 1:7, ring modulation at ×2
+  and ×3, a phase bend, Casio-style phase distortion, and white, pink and brown noise. Each
+  has level, octave, fine tune (detune is two layers a few cents apart), start phase, a
+  *shape* control whose meaning follows the kind, and a *sweep* that moves that shape across
+  the loop and back — pulse-width modulation, FM sweeps and filter-like morphs, baked in.
+- **A drum kit** on General MIDI's notes: kick 36, snare 38, clap 39, hats 42/46, ride 51,
+  toms 41/43/45, each switchable, with tune (a change of sample rate), decay (the keygroup's
+  VCA decay), tone (the zone filter) and level. The oscillators move up to E2 when it's on.
+- **Ten presets** to start from, each carrying an envelope and filter that go to the disk.
+- **Program-tab edits survive a re-render**: the renderer copies each keygroup's settings
+  across from the keygroup playing the same sample, and writes only what its own knobs own.
+- Rendering runs on a background thread, a quarter of a second after the last change; waves
+  are cached so a level or an octave costs a repack, not a resynthesis.
+- **A held note follows a re-render without a click.** Samples are fingerprinted, so a
+  rebuilt programme reuses every sample whose bytes did not change and decodes only what
+  did; a note held through a level, tune or decay change keeps its sample object and takes
+  the new settings in place. A changed wave reaches the next note. The wait after the last
+  knob move is 100 ms, and a render that changed no wave takes a few milliseconds.
+- **Fixed: a note held through a programme change read freed memory.** A voice kept a
+  pointer into the programme it came from, which is retired and freed when a new one
+  arrives; a note still sounding on a sample the new programme did not have then read its
+  envelope, filter and warp out of freed memory - clicks, or worse. Every voice now owns a
+  copy of its keygroup. This predates the Synth tab; the Synth tab made it constant.
+- Glide memory survives a re-render of the same shape, so a line keeps gliding through it.
+- **Choosing a preset keeps the drums**, with every setting they had, when they are on.
+- **Drums play outside mono and the polyphony limit.** A drum note (every keygroup answering
+  it constant-pitch and one-shot, which is what a kit's are, on a library disk or the Synth
+  tab's) takes the voices above the limit, never joins the held-key stack, and never triggers
+  legato - so with Poly at 1 the kick never steals the lead, a snare key held down is not a
+  key for mono to return to, and glide runs between the lead's notes only.
+
+Under it, two ports held to the C# they came from:
+
+- **The disk writer** (`Disk::blank`, `addSample`, `addProgram`, `setZoneSample`,
+  `rebuildPointers`): the C# library's, with every rule the hardware turned out to care
+  about — contiguous directory, the keygroup arena, the header restating it, zone pointers
+  as positions. `DiskEditCheck` builds a disk from nothing every build and asserts each of
+  them; `crosscheck.ps1` shows the C# library reads the result identically.
+- **The synthesis** (`Synth.h`): the additive waveforms, wavetable sweeps, FM, ring, bend,
+  phase distortion, noise and the whole drum kit from `AkaiS950Synth` — with the .NET
+  `System.Random` ported exactly, so seeds mean the same thing. `synthcheck.ps1` renders 45
+  waves and drums with both and compares them word for word: all 45 identical.
+
+**Not yet done:** a synth disk has not been loaded on a real S950. The sample-writing path
+it uses has been; the programme-writing path has not.
+
+### A new look for the plugin window
+
+Redrawn as a dark, panelled interface in the manner of Vital, OB-Xd and the TAL synths, with
+the same design system behind every control (`Plugin/Source/Look.h`):
+
+- **Panels.** Every group sits in a framed card with a small uppercase title and, in its
+  corner, the MIDI controller numbers that reach it.
+- **One knob.** A dark disc with a bright arc for the value, the value as plain text below and
+  the name in small caps below that. Offset knobs draw their arc from the centre and keep a
+  tick at zero, so a knob doing nothing looks like nothing.
+- **Colour means something.** Amber is what's on the disk (the Program tab), cyan is an offset
+  on top of it (the Perform tab, and the "→ sounding" readouts), violet is an extra the S950
+  never had. The same three colours on the tabs, panels, knobs and switches.
+- Pill switches, flat buttons, underline tabs, Segoe UI throughout. The window is 720 × 720,
+  down from 720 × 840; the envelope graphs no longer swallow the height.
+- **Tooltips now appear.** Every control had one; nothing had ever shown them.
+- **The keygroup strip lights up as you play.** A keygroup that answers a note gets brighter,
+  gains a light rim and a marker at the key it took, and stays lit while a voice plays it.
+  The engine counts hits per keygroup, so a drum hit too short to be caught "sounding" still
+  flashes. Brightness and outline only, never a change of hue, so it reads the same with any
+  colour vision. The palette as a whole has no red or green in it, and nothing in the window
+  relies on colour alone.
+
 ### VirtualS950 is now Mz950
 
 The product no longer wears Akai's model name. Mz950 plays Akai S900/S950 disks and says so,

@@ -1712,6 +1712,48 @@ namespace
 
         std::printf ("\n  handing a patch over\n");
 
+        /*
+         * A note held through a programme change to a DIFFERENT sample keeps sounding on
+         * the sample it started with, after the old programme has been freed. It used to
+         * keep a pointer into that programme; this renders a good while after the free,
+         * which is where freed memory would have shown up.
+         */
+        {
+            s950::Engine engine (48000.0);
+            engine.setPatch (patch);
+            engine.noteOn (60, 127);
+            run (engine, 480);
+            const auto sounding = engine.getVoice (0).getSound();
+
+            auto other = makePatch (false);              // same shape, a different sample object
+            engine.setPatch (other);
+            run (engine, 32);                            // taken; the old one is retired
+            engine.collectRetiredPatch();                // and freed
+
+            for (int i = 0; i < 20; ++i) run (engine, 4800);
+            check (engine.getVoice (0).isActive() && engine.getVoice (0).getSound() == sounding,
+                   "a held note outlives the programme it came from", 0, 1);
+            check (engine.getActiveVoices() == 1, "and is still the one voice", engine.getActiveVoices(), 1);
+        }
+
+        // The same patch object, offered again: a held note keeps its sample and follows
+        // the settings - the Synth-tab case, where an unchanged sample is reused by fingerprint.
+        {
+            s950::Engine engine (48000.0);
+            engine.setPatch (patch);
+            engine.noteOn (60, 127);
+            run (engine, 480);
+
+            auto edited = std::make_shared<s950::Patch> (*patch);      // same sounds, new settings
+            edited->keygroups[0].vcaSustain = 5;
+            engine.setPatch (edited);
+            run (engine, 32);
+            engine.collectRetiredPatch();
+            run (engine, 48000);
+
+            check (engine.getVoice (0).isActive(), "a held note follows an edit that kept its sample", 0, 1);
+        }
+
         // A second patch is refused until the audio thread has taken the first: writing
         // `pending` while it might be mid-take was the race. Once taken, it goes.
         {
@@ -1722,6 +1764,119 @@ namespace
             run (engine, 32);                          // the audio thread takes it
             engine.collectRetiredPatch();
             check (engine.trySetPatch (makePatch (true)), "and then goes", 0, 1);
+        }
+
+        // ------------------------------------------------------- drums under mono
+
+        std::printf ("\n  drums outside mono and the limit\n");
+
+        {
+            // A kit under a lead: a saw across the keyboard and two drums, constant pitch
+            // and one-shot, on 36 and 38.
+            auto kit = std::make_shared<s950::Patch>();
+
+            s950::KeygroupPatch lead;
+            lead.keygroupIndex = 0; lead.lowKey = 52; lead.highKey = 127;
+            lead.sound = makeSaw (48000, 48000); lead.zoneFilter = 99;
+            kit->keygroups.push_back (lead);
+
+            for (int k = 1; k <= 2; ++k)
+            {
+                auto hit = makeSaw (4800, 24000);
+                hit->loops = false;
+
+                s950::KeygroupPatch d;
+                d.keygroupIndex = k; d.lowKey = d.highKey = (k == 1 ? 36 : 38);
+                d.sound = hit;
+                d.zoneFilter = 99; d.constantPitch = true; d.oneShot = true;
+                kit->keygroups.push_back (d);
+            }
+
+            s950::Engine engine (48000.0);
+            engine.setPatch (kit);
+            engine.glideSeconds.store (0.1);
+            engine.glide (true);
+            engine.setVoiceLimit (1);
+
+            // the lead in voice 0, held
+            engine.noteOn (60, 127);
+            run (engine, 480);
+            check (engine.getVoice (0).getNote() == 60 && engine.getVoice (0).isHeld(),
+                   "mono: the lead is in voice 0", engine.getVoice (0).getNote(), 60);
+
+            // a kick and a snare: they play, above the limit, and the lead is untouched
+            engine.noteOn (36, 127);
+            engine.noteOn (38, 127);
+            run (engine, 480);
+            check (engine.getActiveVoices() == 3, "two drums sound beside the mono lead",
+                   engine.getActiveVoices(), 3);
+            check (engine.getVoice (0).getNote() == 60 && engine.getVoice (0).isHeld(),
+                   "and did not steal it", engine.getVoice (0).getNote(), 60);
+
+            // the drum keys held down are not "held keys": the next lead note is legato
+            // from the lead, not from a drum, and does not glide from a drum's key
+            engine.noteOn (67, 127);
+            run (engine, 32);
+            check (engine.getVoice (0).getNote() == 67, "a lead note moves the lead voice legato",
+                   engine.getVoice (0).getNote(), 67);
+            check (pitchOf (engine, 67) < 61.0 && pitchOf (engine, 67) > 59.0,
+                   "and glides from the lead's key, not a drum's", pitchOf (engine, 67), 60.0);
+
+            // letting go of a drum key changes nothing for the lead
+            engine.noteOff (36);
+            run (engine, 32);
+            check (engine.getVoice (0).getNote() == 67 && engine.getVoice (0).isHeld(),
+                   "a drum key up leaves the lead where it is", engine.getVoice (0).getNote(), 67);
+
+            // and letting go of the lead's top key returns to the lead's held key, 60
+            engine.noteOff (67);
+            run (engine, 32);
+            check (engine.getVoice (0).getNote() == 60, "letting go returns to the held LEAD key",
+                   engine.getVoice (0).getNote(), 60);
+        }
+
+        // ------------------------------------------------ what the window lights up
+
+        std::printf ("\n  keygroup activity, for the window\n");
+
+        {
+            auto split = std::make_shared<s950::Patch>();
+
+            for (int k = 0; k < 2; ++k)
+            {
+                s950::KeygroupPatch kg;
+                kg.keygroupIndex = k;
+                kg.lowKey        = k == 0 ? 0  : 60;
+                kg.highKey       = k == 0 ? 59 : 127;
+                kg.sound         = makeSaw (48000, 48000);
+                kg.zoneFilter    = 99;
+                split->keygroups.push_back (kg);
+            }
+
+            s950::Engine engine (48000.0);
+            engine.setPatch (split);
+            run (engine, 32);
+
+            check (engine.getKeygroupHits (0) == 0 && engine.getKeygroupLastNote (0) == -1,
+                   "nothing counted before a note", engine.getKeygroupHits (0), 0);
+
+            engine.noteOn (48, 100);
+            run (engine, 32);
+            check (engine.getKeygroupHits (0) == 1, "the keygroup that answered counts one",
+                   engine.getKeygroupHits (0), 1);
+            check (engine.getKeygroupHits (1) == 0, "the other does not",
+                   engine.getKeygroupHits (1), 0);
+            check (engine.getKeygroupLastNote (0) == 48, "and remembers the key",
+                   engine.getKeygroupLastNote (0), 48);
+
+            // Wide doubles the voices, not the count: one note is one hit.
+            engine.wide (true);
+            engine.noteOn (72, 100);
+            run (engine, 32);
+            check (engine.getKeygroupHits (1) == 1, "a wide note counts once",
+                   engine.getKeygroupHits (1), 1);
+            check (engine.getActiveVoices() == 3, "though it is two voices",
+                   engine.getActiveVoices(), 3);
         }
 
         // Mono across a split: a held key in the other keygroup is no reason for legato.

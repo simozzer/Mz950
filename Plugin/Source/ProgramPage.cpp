@@ -13,8 +13,10 @@ namespace
         return juce::String (names[((note % 12) + 12) % 12]) + juce::String (note / 12 - 2);
     }
 
-    const juce::Colour accent   { 0xff5fb4ff };   // the Perform offsets, wherever they show
-    const juce::Colour selectedBar { 0xffd9a441 };
+    // Cyan for the "sounding" readouts - they are the Perform OFFSETS showing through - and
+    // amber for the chosen keygroup, which is on the disk. The same two meanings as Look.h.
+    const juce::Colour accent      = look::perform;
+    const juce::Colour selectedBar = look::program;
 
     /// How a value reads under its knob.
     juce::String describe (KeygroupParam p, int v)
@@ -82,18 +84,36 @@ void KeygroupStrip::setSelected (int k)
     repaint();
 }
 
+void KeygroupStrip::setActivity (std::vector<bool> nowLit, std::vector<int> nowNotes)
+{
+    if (nowLit == lit && nowNotes == notes) return;     // nothing moved: no repaint
+
+    lit   = std::move (nowLit);
+    notes = std::move (nowNotes);
+    repaint();
+}
+
+/*
+ * The strip's axis runs from C0 (note 24) to G8 (127), which is the keyboard the S950 has:
+ * Simon reports it plays nothing below C0, and the two octaves under it that MIDI allows
+ * were a fifth of the strip spent on keys the machine has no answer for. A keygroup whose
+ * stored low key is under 24 is drawn from the left edge.
+ */
+constexpr int firstKey = 24;
+constexpr int keySpan  = 128 - firstKey;
+
 juce::Rectangle<float> KeygroupStrip::barFor (int k) const
 {
     auto area = getLocalBounds().toFloat().withTrimmedBottom (16.0f).reduced (2.0f, 2.0f);
 
-    const float keyWidth = area.getWidth() / 128.0f;
+    const float keyWidth = area.getWidth() / (float) keySpan;
     const float laneH    = area.getHeight() / (float) lanes;
     const auto& r        = ranges[(size_t) k];
 
-    const int lo = juce::jlimit (0, 127, std::min (r.low, r.high));
-    const int hi = juce::jlimit (0, 127, std::max (r.low, r.high));
+    const int lo = juce::jlimit (firstKey, 127, std::min (r.low, r.high));
+    const int hi = juce::jlimit (firstKey, 127, std::max (r.low, r.high));
 
-    return { area.getX() + lo * keyWidth,
+    return { area.getX() + (lo - firstKey) * keyWidth,
              area.getY() + lane[(size_t) k] * laneH,
              (hi - lo + 1) * keyWidth,
              laneH - 2.0f };
@@ -111,34 +131,52 @@ int KeygroupStrip::keygroupAt (juce::Point<float> where) const
 void KeygroupStrip::paint (juce::Graphics& g)
 {
     auto area = getLocalBounds().toFloat();
-    g.setColour (juce::Colours::black.withAlpha (0.25f));
+    g.setColour (juce::Colour (0xff17191d));
     g.fillRoundedRectangle (area.withTrimmedBottom (16.0f), 4.0f);
 
     // Every C along the bottom, so a bar's position can be read as keys.
     const auto keys = area.withTrimmedBottom (16.0f).reduced (2.0f, 2.0f);
-    const float keyWidth = keys.getWidth() / 128.0f;
+    const float keyWidth = keys.getWidth() / (float) keySpan;
 
-    g.setFont (juce::FontOptions (10.0f));
-    for (int n = 0; n < 128; n += 12)
+    g.setFont (look::font (10.0f));
+    for (int n = firstKey; n < 128; n += 12)
     {
-        const float x = keys.getX() + n * keyWidth;
-        g.setColour (juce::Colours::white.withAlpha (0.12f));
+        const float x = keys.getX() + (n - firstKey) * keyWidth;
+        g.setColour (juce::Colours::white.withAlpha (0.08f));
         g.drawVerticalLine ((int) x, keys.getY(), keys.getBottom());
-        g.setColour (juce::Colours::grey);
+        g.setColour (look::dim);
         g.drawText (noteName (n), juce::Rectangle<float> (x - 1.0f, area.getBottom() - 15.0f, 30.0f, 14.0f),
                     juce::Justification::centredLeft, false);
     }
 
     for (int k = 0; k < (int) ranges.size(); ++k)
     {
-        const auto bar = barFor (k);
-        const bool on  = selected < 0 || selected == k;
+        const auto bar     = barFor (k);
+        const bool on      = selected < 0 || selected == k;
+        const bool playing = k < (int) lit.size() && lit[(size_t) k];
 
-        g.setColour (on ? selectedBar : juce::Colours::grey.withAlpha (0.55f));
+        // Playing: the same colour, brighter, with a light rim - so which keygroup a note
+        // went to is visible whether or not it is the one being edited.
+        const auto fill = on ? selectedBar : look::raisedEdge;
+        g.setColour (playing ? fill.brighter (on ? 0.35f : 0.6f) : fill);
         g.fillRoundedRectangle (bar, 3.0f);
 
-        g.setColour (on ? juce::Colours::black : juce::Colours::white);
-        g.setFont (juce::FontOptions (11.0f));
+        if (playing)
+        {
+            g.setColour (look::text);
+            g.drawRoundedRectangle (bar.reduced (1.0f), 3.0f, 2.0f);
+
+            // and a marker at the key it answered
+            const int note = k < (int) notes.size() ? notes[(size_t) k] : -1;
+            if (note >= firstKey && note < 128)
+            {
+                const float x = keys.getX() + (note - firstKey + 0.5f) * keyWidth;
+                g.fillRect (juce::Rectangle<float> (x - 1.0f, bar.getY() + 3.0f, 2.0f, bar.getHeight() - 6.0f));
+            }
+        }
+
+        g.setColour (on ? look::window : look::text);
+        g.setFont (look::bold (11.0f));
         if (bar.getWidth() > 14.0f)
             g.drawText (juce::String (k + 1), bar, juce::Justification::centred, false);
     }
@@ -166,6 +204,10 @@ void KeygroupStrip::mouseMove (const juce::MouseEvent& e)
 
 ProgramPage::ProgramPage (VirtualS950Processor& p) : processor (p)
 {
+    // The panels first, so they are behind everything added after them.
+    addAndMakeVisible (keygroupPanel);
+    addAndMakeVisible (pagePanel);
+
     using P = KeygroupParam;
 
     // --- envelopes: the amplitude one, then the filter one on a row of its own
@@ -220,7 +262,7 @@ ProgramPage::ProgramPage (VirtualS950Processor& p) : processor (p)
     add (P::OneShot,    keys, "One shot");
 
     for (const char* name : { "Envelopes", "Filter", "LFO", "Velocity", "Tuning", "Keys & output" })
-        pages.addTab (name, juce::Colours::transparentBlack, -1);
+        pages.addTab (name, look::program, -1);
 
     pages.setCurrentTabIndex (0, false);
     pages.addChangeListener (this);
@@ -231,6 +273,8 @@ ProgramPage::ProgramPage (VirtualS950Processor& p) : processor (p)
     addAndMakeVisible (strip);
 
     allButton.setClickingTogglesState (false);
+    look::accent (allButton, look::program);
+    look::accent (saveButton, look::program);
     allButton.setTooltip ("Edit every keygroup of the programme at once. A control then shows "
                           "keygroup 1's value, marked * where the others differ; moving it sets "
                           "them all to the same value.");
@@ -243,35 +287,75 @@ ProgramPage::ProgramPage (VirtualS950Processor& p) : processor (p)
     saveButton.onClick = [this] { saveDisk(); };
     addAndMakeVisible (saveButton);
 
-    heading.setText ("PROGRAM   -   what is on the disk. Absolute settings, in the S950's own "
-                     "units, saved with the set and in the disk.",
+    heading.setText ("What is on the disk: absolute settings, in the S950's own units, saved "
+                     "with the set and written into the disk.",
                      juce::dontSendNotification);
-    heading.setColour (juce::Label::textColourId, juce::Colours::grey);
+    heading.setFont (look::font (11.5f));
+    heading.setColour (juce::Label::textColourId, look::dim);
     addAndMakeVisible (heading);
 
-    detail.setFont (juce::FontOptions (14.0f));
+    detail.setFont (look::font (12.5f));
     addAndMakeVisible (detail);
 
     blankNote.setText ("This keygroup has no filter envelope on the disk (an S900 programme). "
                        "Moving a VCF stage, or the amount, writes a flat one to start from.",
                        juce::dontSendNotification);
-    blankNote.setColour (juce::Label::textColourId, juce::Colours::grey);
+    blankNote.setFont (look::font (11.5f));
+    blankNote.setColour (juce::Label::textColourId, look::dim);
     addChildComponent (blankNote);
 
     emptyNote.setText ("Load a disk to edit its programmes. The placeholder saw is not on a "
                        "disk, so there is nothing here to change.",
                        juce::dontSendNotification);
     emptyNote.setJustificationType (juce::Justification::centred);
-    emptyNote.setColour (juce::Label::textColourId, juce::Colours::grey);
+    emptyNote.setFont (look::font (12.5f));
+    emptyNote.setColour (juce::Label::textColourId, look::dim);
     addChildComponent (emptyNote);
 
     showPage (envelopes);
     refresh();
+    startTimerHz (30);
 }
 
 ProgramPage::~ProgramPage()
 {
+    stopTimer();
     pages.removeChangeListener (this);
+}
+
+void ProgramPage::timerCallback()
+{
+    if (! isShowing() || count <= 0)
+        return;
+
+    const double now   = juce::Time::getMillisecondCounterHiRes();
+    const double flash = 180.0;
+
+    if ((int) seenHits.size() != count)
+    {
+        // A new programme: start from its counts, or every keygroup would flash at once.
+        seenHits.assign ((size_t) count, 0u);
+        flashUntil.assign ((size_t) count, 0.0);
+        for (int k = 0; k < count; ++k)
+            seenHits[(size_t) k] = processor.getKeygroupActivity (k).hits;
+    }
+
+    std::vector<bool> lit ((size_t) count);
+    std::vector<int>  notes ((size_t) count, -1);
+
+    for (int k = 0; k < count; ++k)
+    {
+        const auto a = processor.getKeygroupActivity (k);
+        auto& seen   = seenHits[(size_t) k];
+        auto& until  = flashUntil[(size_t) k];
+
+        if (a.hits != seen) { seen = a.hits; until = now + flash; }
+
+        lit[(size_t) k]   = a.sounding || now < until;
+        notes[(size_t) k] = a.lastNote;
+    }
+
+    strip.setActivity (std::move (lit), std::move (notes));
 }
 
 void ProgramPage::add (KeygroupParam p, int onPage, const char* name, const char* trimId, bool zone2)
@@ -298,6 +382,7 @@ void ProgramPage::add (KeygroupParam p, int onPage, const char* name, const char
         c->toggle = std::make_unique<juce::ToggleButton> ("On");
         c->toggle->setTooltip (tip);
         c->toggle->setTitle (name);
+        look::accent (*c->toggle, look::program);
         c->toggle->onClick = [this, raw] { write (*raw, raw->toggle->getToggleState() ? 1 : 0); };
         addChildComponent (*c->toggle);
     }
@@ -318,23 +403,25 @@ void ProgramPage::add (KeygroupParam p, int onPage, const char* name, const char
         c->slider = std::make_unique<juce::Slider> (juce::Slider::RotaryHorizontalVerticalDrag,
                                                     juce::Slider::TextBoxBelow);
         c->slider->setRange (info.lo, info.hi, 1.0);
-        c->slider->setTextBoxStyle (juce::Slider::TextBoxBelow, false, 74, 13);
+        c->slider->setTextBoxStyle (juce::Slider::TextBoxBelow, false, 74, 14);
         c->slider->textFromValueFunction = [p] (double v) { return describe (p, juce::roundToInt (v)); };
         c->slider->valueFromTextFunction = [] (const juce::String& t) { return t.getDoubleValue(); };
         c->slider->setTooltip (tip);
         c->slider->setTitle (name);        // what a screen reader says, rather than "slider"
+        look::accent (*c->slider, look::program);
         c->slider->onValueChange = [this, raw] { write (*raw, juce::roundToInt (raw->slider->getValue())); };
         addChildComponent (*c->slider);
     }
 
     c->label = std::make_unique<juce::Label>();
     c->label->setText (name, juce::dontSendNotification);
-    c->label->setJustificationType (juce::Justification::centred);
     c->label->setTooltip (tip);
+    look::styleCaption (*c->label);
     addChildComponent (*c->label);
 
     c->sounding = std::make_unique<juce::Label>();
     c->sounding->setJustificationType (juce::Justification::centred);
+    c->sounding->setFont (look::bold (11.0f));
     c->sounding->setColour (juce::Label::textColourId, accent);
     c->sounding->setTooltip ("What is actually sounding: this setting plus the Perform offset.");
     addChildComponent (*c->sounding);
@@ -374,7 +461,8 @@ void ProgramPage::refresh()
     emptyNote.setVisible (! haveDisk);
 
     for (auto* c : std::initializer_list<juce::Component*> { &strip, &allButton, &saveButton,
-                                                             &heading, &detail, &pages })
+                                                             &heading, &detail, &pages,
+                                                             &keygroupPanel, &pagePanel })
         c->setVisible (haveDisk);
 
     if (! haveDisk)
@@ -403,10 +491,7 @@ void ProgramPage::refresh()
     strip.setKeygroups (ranges);
     strip.setSelected (selected);
 
-    allButton.setToggleState (selected < 0, juce::dontSendNotification);
-    allButton.setColour (juce::TextButton::buttonColourId,
-                         selected < 0 ? selectedBar.withAlpha (0.6f)
-                                      : getLookAndFeel().findColour (juce::TextButton::buttonColourId));
+    allButton.setToggleState (selected < 0, juce::dontSendNotification);   // the look lights it
 
     // --- the line under it
     const int k = shown();
@@ -447,7 +532,8 @@ void ProgramPage::refresh()
         // A second-zone control on a keygroup with no second zone has nothing to act on.
         const bool usable = ! c->zone2 || hasHard || selected < 0;
 
-        c->label->setText (juce::String (c->name) + (c->varies ? " *" : ""), juce::dontSendNotification);
+        c->label->setText (juce::String (c->name).toUpperCase() + (c->varies ? " *" : ""),
+                           juce::dontSendNotification);
         c->label->setVisible (onPage);
         c->sounding->setVisible (onPage);
 
@@ -539,24 +625,41 @@ void ProgramPage::resized()
 
     emptyNote.setBounds (r);
 
-    heading.setBounds (r.removeFromTop (18));
-    r.removeFromTop (6);
+    heading.setBounds (r.removeFromTop (16));
+    r.removeFromTop (8);
 
-    auto top = r.removeFromTop (28);
-    saveButton.setBounds (top.removeFromRight (120));
-    top.removeFromRight (8);
-    allButton.setBounds (top.removeFromLeft (110));
-    top.removeFromLeft (8);
-    detail.setBounds (top);
+    /*
+     * The keygroups panel: the strip across the keyboard, and above it the buttons and the
+     * line that says which keygroup is being edited.
+     */
+    keygroupPanel.setBounds (r.removeFromTop (look::Panel::headerHeight + 28 + 6 + 84 + 8));
+    {
+        auto area = keygroupPanel.content();
 
-    r.removeFromTop (6);
-    strip.setBounds (r.removeFromTop (84));
+        auto top = area.removeFromTop (26);
+        saveButton.setBounds (top.removeFromRight (112));
+        top.removeFromRight (8);
+        allButton.setBounds (top.removeFromLeft (108));
+        top.removeFromLeft (10);
+        detail.setBounds (top);
 
+        area.removeFromTop (6);
+        strip.setBounds (area.removeFromTop (84));
+    }
+
+    /*
+     * The settings panel, with the six pages as tabs along its top edge - the tab bar IS its
+     * header, which is why this panel has no title of its own.
+     */
     r.removeFromTop (10);
-    pages.setBounds (r.removeFromTop (28));
-    r.removeFromTop (12);
+    pagePanel.setBounds (r);
 
-    blankNote.setBounds (r.removeFromBottom (36));
+    auto inner = pagePanel.getBounds().reduced (look::Panel::pad, 4);
+    pages.setBounds (inner.removeFromTop (28));
+    inner.removeFromTop (12);
+
+    blankNote.setBounds (inner.removeFromBottom (32));
+    r = inner;
 
     /*
      * The page's controls in rows of cells, left to right. The filter envelope starts a row
@@ -569,18 +672,21 @@ void ProgramPage::resized()
     {
         if (c->page != page) continue;
 
+        // Two deliberate breaks: the filter envelope under the amplitude one, and Warp under
+        // the two zones' tuning - so each page reads as its groups, not as a queue of knobs.
         const bool newRow = (c->param == KeygroupParam::VcfAttack)
+                         || (c->param == KeygroupParam::WarpDepth)
                          || (x + cellW > r.getRight());
         if (newRow && x != r.getX()) { x = r.getX(); y += cellH + gap; }
 
         juce::Rectangle<int> cell (x, y, cellW, cellH);
 
         c->sounding->setBounds (cell.removeFromBottom (14));
-        c->label->setBounds (cell.removeFromBottom (15));
+        c->label->setBounds (cell.removeFromBottom (14));
 
         if (c->slider != nullptr) c->slider->setBounds (cell.reduced (2));
-        if (c->toggle != nullptr) c->toggle->setBounds (cell.withSizeKeepingCentre (60, 24));
-        if (c->combo  != nullptr) c->combo->setBounds (cell.withSizeKeepingCentre (80, 24));
+        if (c->toggle != nullptr) c->toggle->setBounds (cell.withSizeKeepingCentre (70, 24));
+        if (c->combo  != nullptr) c->combo->setBounds (cell.withSizeKeepingCentre (80, 26));
 
         x += cellW + gap;
     }

@@ -266,6 +266,17 @@ namespace s950
          * refers to it - see Engine::setPatch. The sound is held by value as a shared_ptr
          * instead, because that is the one thing a voice reads every single sample.
          */
+        /*
+         * BY VALUE, NOT BY POINTER INTO THE PATCH.
+         *
+         * It was a pointer, and the patch it pointed into is retired and freed the moment a
+         * new programme arrives - a programme change, or the Synth tab re-rendering. A
+         * voice still sounding through that, playing a sample the new programme did not
+         * have, kept its pointer and read its envelope, filter and warp out of freed
+         * memory for the rest of the note: clicks at best. Now every voice owns a copy,
+         * and adopt() copies the new settings in when they apply.
+         */
+        KeygroupPatch        own;
         const KeygroupPatch* kg = nullptr;
         SoundPtr             sound;
 

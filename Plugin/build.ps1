@@ -107,6 +107,8 @@ else {
     $diskSources = @(
         (Join-Path $root "Tests\DiskEditCheck.cpp"),
         (Join-Path $root "Source\S950\Disk.cpp"),
+        (Join-Path $root "Source\S950\Synth.cpp"),
+        (Join-Path $root "Source\S950\SynthPatch.cpp"),
         (Join-Path $root "Source\S950\Hfe.cpp")
     )
     $quotedDisk = ($diskSources | ForEach-Object { "`"$_`"" }) -join " "

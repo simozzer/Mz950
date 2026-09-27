@@ -412,6 +412,11 @@ VirtualS950Processor::VirtualS950Processor()
 VirtualS950Processor::~VirtualS950Processor()
 {
     stopTimer();
+
+    // A render still running holds copies of its own; let it finish rather than tear the
+    // cache out from under it.
+    if (renderThread != nullptr && renderThread->joinable())
+        renderThread->join();
 }
 
 void VirtualS950Processor::timerCallback()
@@ -421,6 +426,17 @@ void VirtualS950Processor::timerCallback()
 
     if (patchOwed)
         sendPatch();
+
+    // The synth: collect a finished render, or start one that is due.
+    if (renderThread != nullptr)
+    {
+        if (renderDone.load (std::memory_order_acquire))
+            finishRender();
+    }
+    else if (renderWanted && juce::Time::getMillisecondCounterHiRes() >= renderDueAt)
+    {
+        startRender();
+    }
 
     /*
      * The host chose one of the empty slots. Saying what is current instead puts its chooser
@@ -761,6 +777,12 @@ void VirtualS950Processor::getStateInformation (juce::MemoryBlock& destination)
         node->addTextElement (juce::Base64::toBase64 (packed.getData(), packed.getDataSize()));
     }
 
+    // The Synth tab's recipe, so its knobs come back as they were. The disk it rendered
+    // rides above like any other disk, so the SOUND comes back even before it is re-rendered.
+    auto* synth = xml->createNewChildElement ("SYNTH");
+    synth->setAttribute ("recipe", juce::String (s950::synth::toText (recipe)));
+    synth->setAttribute ("active", synthDisk);
+
     copyXmlToBinary (*xml, destination);
 }
 
@@ -790,6 +812,14 @@ void VirtualS950Processor::setStateInformation (const void* data, int size)
         haveDisk      = true;
 
         xml->removeChildElement (found, true);
+    }
+
+    bool synthWasActive = false;
+    if (auto* synth = xml->getChildByName ("SYNTH"))
+    {
+        recipe         = s950::synth::fromText (synth->getStringAttribute ("recipe").toStdString());
+        synthWasActive = synth->getBoolAttribute ("active", false);
+        xml->removeChildElement (synth, true);
     }
 
     parameters.replaceState (juce::ValueTree::fromXml (*xml));
@@ -823,7 +853,8 @@ void VirtualS950Processor::setStateInformation (const void* data, int size)
     if (! adoptDisk (std::move (restored), error))
         return;
 
-    diskPath = savedPath;
+    diskPath  = savedPath;
+    synthDisk = synthWasActive;
 
     /*
      * Back to the programme that was playing.
@@ -853,7 +884,8 @@ bool VirtualS950Processor::loadDisk (const juce::File& file, juce::String& error
     if (! adoptDisk (std::move (opened), error))
         return false;
 
-    diskPath = file.getFullPathName();
+    diskPath  = file.getFullPathName();
+    synthDisk = false;
     return true;
 }
 
@@ -997,7 +1029,10 @@ void VirtualS950Processor::selectProgram (int index)
 
     if (entry == nullptr) return;
 
-    auto built = disk->buildPatch (*entry);
+    // Reusing the current patch's samples where the bytes are the same: a programme change
+    // decodes only what is new, and a note held through a Synth-tab re-render keeps its
+    // sample object, which is what lets it follow the new settings without restarting.
+    auto built = disk->buildPatch (*entry, patch.get());
     if (built == nullptr || built->keygroups.empty())
         return;                                    // leave what is playing alone
 
@@ -1125,6 +1160,91 @@ void VirtualS950Processor::setKeygroupValue (int keygroup, s950::KeygroupParam p
      * VST3 wrapper turns this into its "mark dirty" flag and nothing else.
      */
     updateHostDisplay (juce::AudioProcessorListener::ChangeDetails {}.withNonParameterStateChanged (true));
+}
+
+VirtualS950Processor::KeygroupActivity VirtualS950Processor::getKeygroupActivity (int keygroup) const
+{
+    KeygroupActivity a;
+    if (engine == nullptr) return a;
+
+    a.hits     = engine->getKeygroupHits (keygroup);
+    a.lastNote = engine->getKeygroupLastNote (keygroup);
+
+    for (int i = 0; i < s950::Engine::Polyphony; ++i)
+    {
+        const auto& v = engine->getVoice (i);
+        if (v.isActive() && v.getKeygroupIndex() == keygroup) { a.sounding = true; break; }
+    }
+
+    return a;
+}
+
+// ---------------------------------------------------------------- the synth
+
+void VirtualS950Processor::setRecipe (const s950::synth::Recipe& r)
+{
+    recipe       = r;
+    renderWanted = true;
+
+    // A tenth of a second after the last change: long enough that a knob mid-drag does not
+    // render every step, short enough to feel like the knob did it. The render itself is
+    // a few milliseconds when no wave changed, since waves are cached and unchanged
+    // samples are not decoded again.
+    renderDueAt  = juce::Time::getMillisecondCounterHiRes() + 100.0;
+}
+
+void VirtualS950Processor::startRender()
+{
+    renderWanted = false;
+    renderDone.store (false, std::memory_order_relaxed);
+
+    /*
+     * The thread gets copies: the recipe as it is now, and the disk it will replace - for
+     * the settings it keeps, see synth::render - so nothing the message thread does
+     * meanwhile can reach it. The wave cache is not copied; only this thread uses it, and
+     * there is only ever one of these threads.
+     */
+    auto wanted   = recipe;
+    auto previous = disk != nullptr ? std::make_unique<s950::Disk> (*disk) : nullptr;
+
+    renderThread = std::make_unique<std::thread> ([this, wanted, previous = std::move (previous)] () mutable
+    {
+        s950::Disk  out;
+        std::string why;
+
+        if (s950::synth::render (wanted, waveCache, previous.get(), out, why))
+            rendered = std::make_unique<s950::Disk> (std::move (out));
+        else
+            rendered.reset();
+
+        renderFailure = why;
+        renderDone.store (true, std::memory_order_release);
+    });
+}
+
+void VirtualS950Processor::finishRender()
+{
+    if (renderThread->joinable())
+        renderThread->join();
+    renderThread.reset();
+
+    renderError = juce::String (renderFailure);
+
+    if (rendered != nullptr)
+    {
+        juce::String why;
+        if (adoptDisk (std::move (rendered), why))
+        {
+            synthDisk = true;
+            diskPath  = {};
+        }
+        else
+            renderError = why;
+
+        rendered.reset();
+    }
+
+    ++editRevision;      // the Program tab shows the new disk's settings
 }
 
 bool VirtualS950Processor::saveDiskAs (const juce::File& file, juce::String& error) const

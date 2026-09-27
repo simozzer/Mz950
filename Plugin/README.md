@@ -44,6 +44,21 @@ side by side looking alike.
   what is actually sounding underneath it in blue, e.g. **→ 52**.
 - **PERFORM is what you do on top of it:** the offsets below, plus glide, polyphony and Wide.
   None of these is ever written to the disk.
+- **SYNTH makes sounds with no disk at all** — and makes them *as a disk*. Three oscillators
+  (sine, triangle, saw, square, pulse, organ, glass, buzz, hollow, three FM ratios, two ring
+  modulators, a bend, phase distortion, three noise colours), each with level, octave, fine
+  tune, start phase, a *shape* control (pulse width, FM index, ring amount, bend, skew, or a
+  morph toward a sine) and a *sweep* (how much of that travels across the loop and back:
+  pulse-width modulation, an FM sweep, a filter-like morph, baked into the sample the way a
+  sampler has always done it). Each oscillator is drawn as a band-limited looped sample and
+  becomes a keygroup layered across the keyboard; detune is two layers a few cents apart.
+  An optional kit — kick, snare, clap, closed and open hat, ride, three toms — puts one-shots
+  on General MIDI's notes (36–51), each with tune, decay, tone and level, and the oscillators
+  move up to start at E2. Ten presets to start from. A change re-renders to a blank disk
+  held in memory, which becomes the loaded disk: the Program tab edits it (and those edits
+  survive a re-render), the set saves it, and *Save disk as…* writes it for a real S950.
+  Every wave and drum is held to the C# `AkaiS950Synth` tool word for word by
+  `synthcheck.ps1`; the disk it builds is read identically by the C# library.
 
 Program edits change only the values of existing settings, one byte each. They never add or
 remove keygroups, samples or files, which stays in the Studio. `Tests/DiskEditCheck.cpp`, run

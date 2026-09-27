@@ -8,6 +8,13 @@ namespace s950
         : sampleRate (rate <= 0 ? 48000.0 : rate)
     {
         matched.reserve (Polyphony);
+
+        // std::atomic's default constructor leaves the value wherever the memory was.
+        for (int i = 0; i < ActivitySlots; ++i)
+        {
+            keygroupHits[i].store (0u, std::memory_order_relaxed);
+            keygroupLastNote[i].store (-1, std::memory_order_relaxed);
+        }
     }
 
     /*
@@ -93,10 +100,18 @@ namespace s950
         // waiting to be struck again.
         repatch();
 
-        // A new programme's keygroups have no last notes yet: glide memory is per keygroup,
-        // and keygroup 3 of the old programme is nothing to do with keygroup 3 of this one.
-        for (auto& memory : glideFrom)
-            memory = GlideMemory {};
+        /*
+         * A programme with a different SHAPE - more keygroups, fewer - has no last notes
+         * yet: glide memory is per keygroup, and keygroup 3 of one programme is nothing to
+         * do with keygroup 3 of another. The same shape keeps its memory: that is the Synth
+         * tab re-rendering under a held line, and the line must go on gliding through it.
+         */
+        const int had = retired != nullptr ? static_cast<int> (retired->keygroups.size()) : -1;
+        const int now = audioPatch != nullptr ? static_cast<int> (audioPatch->keygroups.size()) : -1;
+
+        if (had != now)
+            for (auto& memory : glideFrom)
+                memory = GlideMemory {};
     }
 
     // ---------------------------------------------------------------------- the ring
@@ -151,8 +166,18 @@ namespace s950
         switch (e.kind)
         {
             // Legato only if another key is still down once this one is counted.
-            case EvNoteOn:  pressKey (e.a, e.b); startNote (e.a, e.b, heldCount > 1); break;
-            case EvNoteOff: liftKey (e.a);       stopNote (e.a);                      break;
+            // A drum key is not a held key: it never joins the stack mono returns to, and
+            // never asks for legato.
+            case EvNoteOn:
+                if (isDrumNote (e.a, e.b)) { startNote (e.a, e.b, false); break; }
+                pressKey (e.a, e.b);
+                startNote (e.a, e.b, heldCount > 1);
+                break;
+
+            case EvNoteOff:
+                if (! isDrumNote (e.a, 127)) liftKey (e.a);
+                stopNote (e.a);
+                break;
 
             case EvWide:    wideOn = e.a != 0;           break;
 
@@ -238,14 +263,31 @@ namespace s950
         }
     }
 
+    bool Engine::isDrumNote (int note, int velocity)
+    {
+        if (audioPatch == nullptr) return false;
+
+        audioPatch->matching (note, velocity, matched);
+        if (matched.empty()) return false;
+
+        for (const KeygroupPatch* kg : matched)
+            if (! (kg->constantPitch && kg->oneShot)) return false;
+
+        return true;
+    }
+
     void Engine::startNote (int note, int velocity, bool legato)
     {
         if (audioPatch == nullptr)
             return;
 
+        // A drum plays as a drum whatever the polyphony says: outside mono, outside the
+        // limit, every keygroup answering it. See isDrumNote.
+        const bool drum = isDrumNote (note, velocity);
+
         audioPatch->matching (note, velocity, matched);
 
-        const bool mono = voiceLimit == 1;
+        const bool mono = voiceLimit == 1 && ! drum;
         const double glideTime = glideSeconds.load (std::memory_order_relaxed);
 
         /*
@@ -264,6 +306,7 @@ namespace s950
                 const double glideSemis = (glideOn && from >= 0.0) ? from - note : 0.0;
 
                 v.legatoTo (note, glideSemis, glideTime);
+                noteHit (kg->keygroupIndex, note);
 
                 // A wide pair moves as one.
                 const int twin = v.getPartner();
@@ -375,7 +418,7 @@ namespace s950
                 }
             }
 
-            Voice& v = take();
+            Voice& v = take (drum);
             v.setTrims (trims.read());
 
             const int first = static_cast<int> (&v - voices);
@@ -390,6 +433,7 @@ namespace s950
 
             v.start (*kg, note, velocity, sampleRate, wheelCents, sequence++, fade,
                      glideSemis, glideTime);
+            noteHit (kg->keygroupIndex, note);
 
             /*
              * Wide: the second half. take() cannot hand back `v` - it is the newest voice and
@@ -399,7 +443,7 @@ namespace s950
              */
             if (wideOn && ! kg->constantPitch)
             {
-                Voice& w = take();
+                Voice& w = take (drum);
                 w.setTrims (trims.read());
                 w.start (*kg, note, velocity, sampleRate, wheelCents, sequence++, fade,
                          glideSemis, glideTime);
@@ -495,18 +539,26 @@ namespace s950
      * is holding while a released note was left ringing beside it - which reads exactly like
      * "the release did not happen".
      */
-    Voice& Engine::take()
+    Voice& Engine::take (bool drum)
     {
-        // Only the first so many voices are ever handed out: one per note allowed, or two
-        // when wide. Mono always plays voice 0 (and 1, wide), which is what lets startNote
-        // find the note it may move legato.
+        /*
+         * Only the first so many voices are handed out for NOTES: one per note allowed, or
+         * two when wide. Mono always plays voice 0 (and 1, wide), which is what lets
+         * startNote find the note it may move legato.
+         *
+         * DRUMS take the voices above that - the seven a mono lead leaves idle - so a kick
+         * never steals the lead and the lead never steals the kick. With no limit there is
+         * nothing above it, and a drum is a note like any other.
+         */
         const int limit = std::min (Polyphony, getNoteLimit() * (wideOn ? 2 : 1));
+        const int from  = (drum && limit < Polyphony) ? limit : 0;
+        const int to    = (drum && limit < Polyphony) ? Polyphony : limit;
 
-        for (int i = 0; i < limit; ++i)
+        for (int i = from; i < to; ++i)
             if (! voices[i].isActive()) return voices[i];
 
         int pick = -1;
-        for (int i = 0; i < limit; ++i)
+        for (int i = from; i < to; ++i)
         {
             if (voices[i].isHeld()) continue;                 // still down: leave it
             if (pick < 0 || voices[i].getStartedAt() < voices[pick].getStartedAt()) pick = i;
@@ -514,8 +566,8 @@ namespace s950
 
         if (pick < 0)
         {
-            pick = 0;
-            for (int i = 1; i < limit; ++i)
+            pick = from;
+            for (int i = from + 1; i < to; ++i)
                 if (voices[i].getStartedAt() < voices[pick].getStartedAt()) pick = i;
         }
 

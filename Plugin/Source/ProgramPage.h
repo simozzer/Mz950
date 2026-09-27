@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include "PluginProcessor.h"
+#include "Look.h"
 
 #include <functional>
 #include <memory>
@@ -30,6 +31,14 @@ public:
     /// The one to highlight, or -1 for all of them.
     void setSelected (int keygroup);
 
+    /*
+     * Which keygroups are playing right now, and the key each last answered, so the strip
+     * lights up as notes arrive and says which keygroup took each one. A lit keygroup gets
+     * brighter and gains a light outline and a marker at the key - never a change of hue,
+     * so it reads the same whatever someone's colour vision.
+     */
+    void setActivity (std::vector<bool> lit, std::vector<int> notes);
+
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseMove (const juce::MouseEvent&) override;
@@ -40,6 +49,8 @@ private:
 
     std::vector<Range> ranges;
     std::vector<int>   lane;
+    std::vector<bool>  lit;
+    std::vector<int>   notes;
     int lanes = 1;
     int selected = -1;
 };
@@ -58,7 +69,8 @@ private:
  * envelopes, filter, LFO, velocity, tuning, and the keys and output a keygroup covers.
  */
 class ProgramPage : public juce::Component,
-                    private juce::ChangeListener
+                    private juce::ChangeListener,
+                    private juce::Timer
 {
 public:
     explicit ProgramPage (VirtualS950Processor&);
@@ -99,6 +111,17 @@ private:
     /// The sub-tab bar changed page.
     void changeListenerCallback (juce::ChangeBroadcaster*) override { showPage (pages.getCurrentTabIndex()); }
 
+    /*
+     * Lighting the strip as notes play. Its own timer, faster than the editor's: a
+     * keygroup that flashes 100 ms late has already stopped being useful.
+     *
+     * A keygroup stays lit while a voice plays it, and for a moment after its hit count
+     * moved - so a hit too short to be caught sounding still shows.
+     */
+    void timerCallback() override;
+    std::vector<unsigned> seenHits;
+    std::vector<double>   flashUntil;    // milliseconds, on Time::getMillisecondCounterHiRes
+
     void showPage (int page);
     void choose (int keygroup);
     void write (Control& c, int value);
@@ -110,6 +133,10 @@ private:
     VirtualS950Processor& processor;
 
     std::vector<std::unique_ptr<Control>> controls;
+
+    /// Amber throughout: everything on this page is what is on the disk. See Look.h.
+    look::Panel keygroupPanel { "KEYGROUPS", look::program, "click one to edit it" };
+    look::Panel pagePanel     { "", look::program };
 
     KeygroupStrip        strip;
     juce::TextButton     allButton  { "All keygroups" };

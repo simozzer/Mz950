@@ -238,6 +238,28 @@ namespace s950
 
         int getActiveVoices() const;
 
+        /*
+         * What each keygroup has been asked to play, for a window that lights them up.
+         *
+         * A COUNT of notes answered, not a flag, and the last note: a drum hit is over
+         * between two redraws of a window, and a flag would be off again before anything
+         * saw it. A count that moved says "this was hit", however briefly. Written on the
+         * audio thread as a note starts, read from anywhere.
+         */
+        static constexpr int ActivitySlots = 64;
+
+        unsigned getKeygroupHits (int keygroup) const
+        {
+            return keygroup >= 0 && keygroup < ActivitySlots
+                     ? keygroupHits[keygroup].load (std::memory_order_relaxed) : 0u;
+        }
+
+        int getKeygroupLastNote (int keygroup) const
+        {
+            return keygroup >= 0 && keygroup < ActivitySlots
+                     ? keygroupLastNote[keygroup].load (std::memory_order_relaxed) : -1;
+        }
+
         const Voice& getVoice (int i) const { return voices[i]; }
 
     private:
@@ -275,9 +297,21 @@ namespace s950
         void startNote (int note, int velocity, bool legato = false);
         void stopNote (int note);
 
+        /*
+         * A DRUM NOTE is one every keygroup answering it plays constant-pitch and one-shot -
+         * which is what a kit's keygroups are, on a library disk and on the Synth tab's.
+         *
+         * Drums live outside the polyphony limit and outside mono. With Poly at 1 a kick
+         * must not steal the lead, and a snare key held down is not a "held key" for legato
+         * to return to. So a drum is played from the voices ABOVE the limit (all of them
+         * when there is no limit), never enters the held-key stack, and never moves a voice
+         * legato. take (true) hands out those voices.
+         */
+        bool isDrumNote (int note, int velocity);
+
         /// Voice i let go, and forgotten as a glide's origin if it was cut off mid-glide.
         void releaseVoice (int i);
-        Voice& take();
+        Voice& take (bool drum = false);
 
         double sampleRate = 48000.0;
 
@@ -334,6 +368,17 @@ namespace s950
 
         bool        glideOn = false;
         GlideMemory glideFrom[GlideSlots];
+
+        std::atomic<unsigned> keygroupHits[ActivitySlots];
+        std::atomic<int>      keygroupLastNote[ActivitySlots];
+
+        /// A keygroup answered `note`: count it, for the window. See getKeygroupHits.
+        void noteHit (int keygroupIndex, int note)
+        {
+            if (keygroupIndex < 0 || keygroupIndex >= ActivitySlots) return;
+            keygroupLastNote[keygroupIndex].store (note, std::memory_order_relaxed);
+            keygroupHits[keygroupIndex].fetch_add (1u, std::memory_order_relaxed);
+        }
 
         int  voiceLimit = Polyphony;     // in NOTES - see getNoteLimit
         bool wideOn     = false;

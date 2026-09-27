@@ -4,8 +4,11 @@
 
 #include "S950/Engine.h"
 #include "S950/Disk.h"
+#include "S950/SynthPatch.h"
 
+#include <atomic>
 #include <memory>
+#include <thread>
 
 /*
  * The plugin.
@@ -167,9 +170,45 @@ public:
     /// Bumped by every edit, so the window can redraw what it shows.
     int getEditRevision() const { return editRevision; }
 
-    /// Which tab the window last showed - 0 Program, 1 Perform - so reopening it, which a
-    /// host does every time the window is closed, comes back where it was. Not saved.
+    /*
+     * What a keygroup is doing right now, for the strip that lights them up as they play.
+     *
+     * `hits` counts the notes it has answered since the engine was built - a window keeps
+     * the last count it saw and flashes the keygroup when the count moves, which catches a
+     * note too short to be seen sounding. `sounding` is whether a voice is playing it this
+     * instant; `lastNote` is the key it last answered. Approximate by nature, like the
+     * voice count.
+     */
+    struct KeygroupActivity { unsigned hits = 0; int lastNote = -1; bool sounding = false; };
+    KeygroupActivity getKeygroupActivity (int keygroup) const;
+
+    /// Which tab the window last showed - 0 Program, 1 Perform, 2 Synth - so reopening it,
+    /// which a host does every time the window is closed, comes back where it was. Not saved.
     int editorTab = 0;
+
+    // ---------------------------------------------------------------- the synth
+
+    /*
+     * The Synth tab's recipe, and its rendering to a disk. See S950/SynthPatch.h.
+     *
+     * Rendering a full kit takes up to half a second, so it runs on a thread of its own
+     * and lands through the timer; the tab says "rendering" meanwhile. A knob turned
+     * while one is running queues one more, with the newest recipe, so a knob dragged
+     * fast costs two renders rather than fifty. The rendered disk then replaces whatever
+     * disk was loaded - it is a disk like any other from there on.
+     *
+     * Message thread, all of it.
+     */
+    const s950::synth::Recipe& getRecipe() const { return recipe; }
+
+    /// Keep this recipe, and render it shortly.
+    void setRecipe (const s950::synth::Recipe& r);
+
+    bool isRendering() const { return renderThread != nullptr; }
+    juce::String getRenderError() const { return renderError; }
+
+    /// True while the loaded disk is the synth's own rendering rather than a file.
+    bool diskIsSynth() const { return synthDisk; }
 
     /*
      * The disk as it now stands, edits and all, written as a plain sector image - which is
@@ -192,6 +231,22 @@ private:
     bool patchOwed = false;
 
     int editRevision = 0;
+
+    // the synth's rendering, see setRecipe
+    s950::synth::Recipe    recipe;
+    s950::synth::WaveCache waveCache;       // touched only by the render thread
+    bool   synthDisk    = false;
+    bool   renderWanted = false;
+    double renderDueAt  = 0.0;
+
+    std::unique_ptr<std::thread> renderThread;
+    std::atomic<bool>            renderDone { false };
+    std::unique_ptr<s950::Disk>  rendered;
+    std::string                  renderFailure;
+    juce::String                 renderError;
+
+    void startRender();
+    void finishRender();
 
     void timerCallback() override;
 

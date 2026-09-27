@@ -97,11 +97,13 @@ namespace
 namespace
 {
     // The shape's own colours, kept together so the two graphs cannot drift apart.
+    // The graph is an OFFSET control, so it draws in cyan like the knobs beside it; amber
+    // is kept for what is on the disk, which this is not. See Look.h.
     const juce::Colour envBack   { 0xff17191d };
     const juce::Colour envGrid   { 0xff2b2f36 };
-    const juce::Colour envLine   { 0xff45c8dc };
-    const juce::Colour envHandle { 0xffe9a33a };
-    const juce::Colour envFaint  { 0xff707888 };
+    const juce::Colour envLine   = look::perform;
+    const juce::Colour envHandle = look::text;
+    const juce::Colour envFaint  = look::dim;
 
     /*
      * The readout has to be READ. It was the same grey as the hints around it, on a dark
@@ -300,7 +302,7 @@ void EnvelopeEditor::paint (juce::Graphics& g)
     if (! base.written)
     {
         g.setColour (envFaint);
-        g.setFont (11.0f);
+        g.setFont (look::font (11.0f));
         g.drawText ("none on the disk - dial in an amount",
                     r.removeFromBottom (16.0f), juce::Justification::centredRight);
     }
@@ -322,7 +324,7 @@ void EnvelopeEditor::paint (juce::Graphics& g)
     if (base.hasRelease)
         text += "   R " + juce::String (juce::roundToInt (s.release));
 
-    g.setFont (juce::Font (juce::FontOptions (12.0f)).boldened());
+    g.setFont (look::bold (11.5f));
     const int wide = juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), text);
     auto chip = juce::Rectangle<int> (wide + 14, 18)
                     .withPosition (getLocalBounds().getRight() - wide - 20, 5);
@@ -470,14 +472,28 @@ void EnvelopeEditor::timerCallback()
 VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
     : AudioProcessorEditor (&p), processor (p)
 {
+    // Before any child is made, so every one of them is born wearing it.
+    setLookAndFeel (&lookAndFeel);
+
+    /*
+     * The panels go in first, so they sit BEHIND the controls laid out on top of them -
+     * z-order is the order of adding, and a panel that arrived after its knobs would cover
+     * them. They are only decoration and let the mouse through anyway.
+     */
+    for (auto* panel : { &filterPanel, &lfoPanel, &velocityPanel, &vcaPanel, &vcfPanel,
+                         &glidePanel, &widePanel })
+        addAndMakeVisible (*panel);
+
     gain.setTextValueSuffix ("");
+    gain.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 46, 14);
+    look::accent (gain, look::neutral);
     addAndMakeVisible (gain);
 
     gainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         processor.parameters, "gain", gain);
 
     gainLabel.setText ("Gain", juce::dontSendNotification);
-    gainLabel.setJustificationType (juce::Justification::centred);
+    look::styleCaption (gainLabel);
     addAndMakeVisible (gainLabel);
 
     /*
@@ -548,13 +564,14 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
         k.slider->setDoubleClickReturnValue (true, 0.0);
         k.slider->setTooltip (tip);
         k.slider->setTitle (juce::String (w.group) + " " + w.name + " offset");
-        k.slider->setTextBoxStyle (juce::Slider::TextBoxBelow, false, 46, 13);
+        k.slider->setTextBoxStyle (juce::Slider::TextBoxBelow, false, 46, 14);
+        look::accent (*k.slider, look::perform);           // cyan: an offset
         addAndMakeVisible (*k.slider);
 
         k.label = std::make_unique<juce::Label>();
         k.label->setText (w.name, juce::dontSendNotification);
-        k.label->setJustificationType (juce::Justification::centred);
         k.label->setTooltip (tip);
+        look::styleCaption (*k.label);
         addAndMakeVisible (*k.label);
 
         k.attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
@@ -563,48 +580,23 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
         knobs.push_back (std::move (k));
     }
 
-    for (auto* h : { &vcaHeading, &vcfHeading, &sampleHeading, &lfoHeading,
-                     &velocityHeading })
-    {
-        h->setJustificationType (juce::Justification::centredLeft);
-        h->setColour (juce::Label::textColourId, juce::Colours::grey);
-        addAndMakeVisible (*h);
-    }
-
-    // Short, because each now has half the width. The controller numbers are on the
-    // tooltip of the graph itself, which is where someone looking for them would point.
-    vcaHeading.setText ("VCA envelope", juce::dontSendNotification);
-    vcfHeading.setText ("VCF envelope", juce::dontSendNotification);
-    // No heading over this row: the knob is already labelled Filter, and a heading saying the
-    // same word above it is just the word twice. The label stays empty rather than being
-    // deleted so the row keeps its spacing, and so there is somewhere to put a heading if
-    // this row ever holds enough controls to need one.
-    sampleHeading.setText ("", juce::dontSendNotification);
-
-    // This one does need a heading: three knobs called Rate, Depth and Delay could belong to
-    // half a dozen things, and the machine calls it the LFO.
-    lfoHeading.setText ("LFO", juce::dontSendNotification);
-    velocityHeading.setText ("VELOCITY", juce::dontSendNotification);
-
-    // Glide. Not a machine feature, and the heading is where that gets said once.
-    glideHeading.setText ("GLIDE & POLYPHONY  (not on the S950)", juce::dontSendNotification);
-    glideHeading.setJustificationType (juce::Justification::centredLeft);
-    glideHeading.setColour (juce::Label::textColourId, juce::Colours::grey);
-    addAndMakeVisible (glideHeading);
-
+    // Glide. Not a machine feature, and its panel's note is where that gets said once.
     const juce::String glideTip =
         "Portamento: each note slides in from the last note played in the same keygroup. "
         "Crossing into another keygroup does not glide. An addition - the S950 has no "
         "glide. MIDI CC 65 switches it (64 and up is on), CC 5 sets the time.";
 
+    glideButton.setButtonText ("Glide");
     glideButton.setTooltip (glideTip);
+    look::accent (glideButton, look::extra);
     addAndMakeVisible (glideButton);
     glideAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
         processor.parameters, "glide", glideButton);
 
     glideTime.setTooltip ("How long a glide takes, whatever the interval. MIDI CC 5: "
                           "0 is no glide, 127 is three seconds.");
-    glideTime.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 56, 13);
+    glideTime.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 56, 14);
+    look::accent (glideTime, look::extra);
     addAndMakeVisible (glideTime);
     glideTimeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         processor.parameters, "glideTime", glideTime);
@@ -613,8 +605,8 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
     glideTime.setDoubleClickReturnValue (true, 120.0);
 
     glideTimeLabel.setText ("Time", juce::dontSendNotification);
-    glideTimeLabel.setJustificationType (juce::Justification::centred);
     glideTimeLabel.setTooltip (glideTime.getTooltip());
+    look::styleCaption (glideTimeLabel);
     addAndMakeVisible (glideTimeLabel);
 
     voiceCount.setTooltip ("Polyphony: the most notes that can sound at once, 1 to 8 - "
@@ -622,18 +614,17 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
                            "while another is held moves the note there without restarting "
                            "it, gliding if glide is on, and letting go goes back to the key "
                            "still held. MIDI CC 106: 0-15 is mono, 112-127 all eight.");
-    voiceCount.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 46, 13);
+    voiceCount.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 46, 14);
+    look::accent (voiceCount, look::extra);
     addAndMakeVisible (voiceCount);
     voiceCountAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         processor.parameters, "voices", voiceCount);
     voiceCount.setDoubleClickReturnValue (true, 8.0);
 
     // --- wide
-    wideHeading.setText ("WIDE  (not on the S950)", juce::dontSendNotification);
-    wideHeading.setJustificationType (juce::Justification::centredLeft);
-    wideHeading.setColour (juce::Label::textColourId, juce::Colours::grey);
-    addAndMakeVisible (wideHeading);
-
+    wideButton.setButtonText ("Wide");
+    look::accent (wideButton, look::extra);
+    look::accent (offsetButton, look::extra);
     wideButton.setTooltip ("Wide: every note as two voices, one detuned flat and leaning left, "
                            "one sharp by the same amount and leaning right. At most four notes "
                            "- the S950's eight voices, two to a note. An addition: the S950 "
@@ -654,15 +645,16 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
                                  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>& a)
     {
         s.setTooltip (tip);
-        s.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 56, 13);
+        s.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 56, 14);
+        look::accent (s, look::extra);
         addAndMakeVisible (s);
         a = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
             processor.parameters, id, s);
         s.setDoubleClickReturnValue (true, reset);
 
         l.setText (name, juce::dontSendNotification);
-        l.setJustificationType (juce::Justification::centred);
         l.setTooltip (tip);
+        look::styleCaption (l);
         addAndMakeVisible (l);
     };
 
@@ -677,8 +669,8 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
                    70.0, wideSpreadAttachment);
 
     voiceCountLabel.setText ("Poly", juce::dontSendNotification);
-    voiceCountLabel.setJustificationType (juce::Justification::centred);
     voiceCountLabel.setTooltip (voiceCount.getTooltip());
+    look::styleCaption (voiceCountLabel);
     addAndMakeVisible (voiceCountLabel);
 
     vcaEnvelope.setTooltip ("The amplitude envelope, across every keygroup in the programme. "
@@ -694,10 +686,12 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
     addAndMakeVisible (vcfEnvelope);
 
     patchLabel.setJustificationType (juce::Justification::centredLeft);
+    patchLabel.setFont (look::bold (12.0f));
     addAndMakeVisible (patchLabel);
 
     voicesLabel.setJustificationType (juce::Justification::centredLeft);
-    voicesLabel.setColour (juce::Label::textColourId, juce::Colours::grey);
+    voicesLabel.setFont (look::font (11.5f));
+    voicesLabel.setColour (juce::Label::textColourId, look::dim);
     addAndMakeVisible (voicesLabel);
 
     loadButton.onClick = [this] { openDisk(); };
@@ -715,28 +709,39 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
     // Whatever the processor is already holding - this editor may well not be the first.
     refreshPrograms();
 
-    // --- the two tabs
-    mainTabs.addTab ("PROGRAM", juce::Colours::transparentBlack, -1);
-    mainTabs.addTab ("PERFORM", juce::Colours::transparentBlack, -1);
+    // --- the two tabs, each in the colour its controls wear
+    mainTabs.addTab ("Program", look::program, -1);
+    mainTabs.addTab ("Perform", look::perform, -1);
+    mainTabs.addTab ("Synth",   look::extra,   -1);     // violet: not on the S950
     mainTabs.addChangeListener (this);
     addAndMakeVisible (mainTabs);
 
     addChildComponent (programPage);
+    addChildComponent (synthPage);
 
-    performHeading.setText ("PERFORM   -   offsets and extras on top of the programme. Played "
-                            "live and from MIDI CCs; never written to the disk.",
+    performHeading.setText ("Offsets and extras on top of the programme, played live and from "
+                            "MIDI CCs. Never written to the disk.",
                             juce::dontSendNotification);
-    performHeading.setColour (juce::Label::textColourId, juce::Colours::grey);
+    performHeading.setFont (look::font (11.5f));
+    performHeading.setColour (juce::Label::textColourId, look::dim);
     addAndMakeVisible (performHeading);
 
-    mainTabs.setCurrentTabIndex (juce::jlimit (0, 1, processor.editorTab), false);
+    mainTabs.setCurrentTabIndex (juce::jlimit (0, 2, processor.editorTab), false);
     showTab (mainTabs.getCurrentTabIndex());
+
+    /*
+     * Now that every child is in place, tell them all. setLookAndFeel only reaches the
+     * children a component has at the time, and most of these were built as members before
+     * the constructor body ran - so a Slider had already copied JUCE's default outline
+     * colour into its value box, and drew a frame round it that the look says not to.
+     */
+    sendLookAndFeelChange();
 
     // Big enough to hold the file browser, which opens inside this window rather than as a
     // dialog of its own - see openDisk.
     // 120 taller than it was, for the LFO row: 108 for the knobs and 12 to stand them off
     // the row above.
-    setSize (720, 840);
+    setSize (720, 720);
     startTimerHz (10);
 }
 
@@ -840,16 +845,20 @@ VirtualS950Editor::~VirtualS950Editor()
 {
     stopTimer();
     mainTabs.removeChangeListener (this);
+
+    // Before lookAndFeel goes: a child asked to repaint during teardown must not find a
+    // dangling one.
+    setLookAndFeel (nullptr);
 }
 
 std::vector<juce::Component*> VirtualS950Editor::performParts()
 {
     std::vector<juce::Component*> parts {
         &performHeading, &vcaEnvelope, &vcfEnvelope,
-        &vcaHeading, &vcfHeading, &sampleHeading, &lfoHeading, &velocityHeading,
-        &glideHeading, &glideButton, &glideTime, &glideTimeLabel,
+        &filterPanel, &lfoPanel, &velocityPanel, &vcaPanel, &vcfPanel, &glidePanel, &widePanel,
+        &glideButton, &glideTime, &glideTimeLabel,
         &voiceCount, &voiceCountLabel,
-        &wideHeading, &wideButton, &offsetButton, &wideDetune, &wideDetuneLabel,
+        &wideButton, &offsetButton, &wideDetune, &wideDetuneLabel,
         &wideSpread, &wideSpreadLabel };
 
     for (auto& k : knobs)
@@ -869,6 +878,7 @@ void VirtualS950Editor::showTab (int tab)
         c->setVisible (tab == 1);
 
     programPage.setVisible (tab == 0);
+    synthPage.setVisible (tab == 2);
 
     if (tab == 0)
         programPage.refresh();
@@ -971,10 +981,10 @@ void VirtualS950Editor::timerCallback()
 
 void VirtualS950Editor::paint (juce::Graphics& g)
 {
-    g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
+    g.fillAll (look::window);
 
-    g.setColour (juce::Colours::white);
-    g.setFont (juce::FontOptions (22.0f));
+    g.setColour (look::text);
+    g.setFont (look::bold (24.0f));
     g.drawText ("Mz950", 16, 12, getWidth() - 32, 28,
                 juce::Justification::centredLeft, true);
 
@@ -988,15 +998,13 @@ void VirtualS950Editor::paint (juce::Graphics& g)
      */
     // Bottom left, beside the licence: the top-right corner is gain's, since the header was
     // rebuilt around the two tabs, and the stamp drawn there ran underneath the knob.
-    g.setColour (juce::Colours::darkgrey);
-    g.setFont (juce::FontOptions (10.0f));
+    g.setColour (look::faint);
+    g.setFont (look::font (10.0f));
     g.drawText ("built " + juce::String (__DATE__) + "  " + __TIME__,
                 16, getHeight() - 22, getWidth() / 2, 16,
                 juce::Justification::centredLeft, true);
 
     // The licence asks an interactive program to say so where it can be seen.
-    g.setColour (juce::Colours::darkgrey);
-    g.setFont (juce::FontOptions (10.0f));
     g.drawText (juce::CharPointer_UTF8 ("Copyright \xc2\xa9 2026 Simon Moscrop  -  AGPLv3, "
                                         "no warranty  -  github.com/simozzer/Mz950"),
                 16, getHeight() - 22, getWidth() - 32, 16,
@@ -1009,16 +1017,15 @@ void VirtualS950Editor::paint (juce::Graphics& g)
      * of mention; the plugin wearing the name was not, which is why it is called Mz950. The
      * disclaimer sits where the name is, rather than in small print nobody reaches.
      */
-    g.setColour (juce::Colours::grey);
-    g.setFont (juce::FontOptions (11.0f));
+    g.setColour (look::dim);
+    g.setFont (look::font (11.0f));
     g.drawText ("plays Akai S900/S950 disks  -  independent, not affiliated with Akai or inMusic",
                 100, 22, getWidth() - 100 - 16 - 126, 16,
                 juce::Justification::centredLeft, true);
 
-    g.setColour (juce::Colours::grey);
-    g.setFont (juce::FontOptions (13.0f));
-
     const auto disk = processor.getDiskName();
+    g.setColour (disk.isEmpty() ? look::dim : look::text);
+    g.setFont (look::font (12.5f));
     g.drawText (disk.isEmpty() ? "no disk  -  placeholder sound"
                                : juce::File (disk).getFileName(),
                 16, 40, getWidth() - 32, 20,
@@ -1037,22 +1044,22 @@ void VirtualS950Editor::resized()
      * Only the header is narrowed by it. Everything below gets the whole width, which the
      * Program tab's rows of keygroup controls need.
      */
-    auto head = r.removeFromTop (118);
-    auto gainCell = head.removeFromRight (110);
-    gainLabel.setBounds (gainCell.removeFromBottom (18));
-    gain.setBounds (gainCell);
+    auto head = r.removeFromTop (112);
+    auto gainCell = head.removeFromRight (96);
+    gainLabel.setBounds (gainCell.removeFromBottom (14));
+    gain.setBounds (gainCell.withTrimmedTop (4));
     head.removeFromRight (16);
 
     head.removeFromTop (48);                    // the title painted above
-    auto row = head.removeFromTop (28);
-    loadButton.setBounds (row.removeFromLeft (110));
+    auto row = head.removeFromTop (26);
+    loadButton.setBounds (row.removeFromLeft (104));
     row.removeFromLeft (8);
     programs.setBounds (row);
 
-    head.removeFromTop (8);
-    mainTabs.setBounds (head.removeFromTop (30).withWidth (280));
+    head.removeFromTop (10);
+    mainTabs.setBounds (head.removeFromTop (28).withWidth (300));
 
-    r.removeFromTop (12);
+    r.removeFromTop (10);
 
     // the licence line is painted along the very bottom, and the status line sits above it
     r.removeFromBottom (14);
@@ -1062,149 +1069,114 @@ void VirtualS950Editor::resized()
     r.removeFromBottom (14);
 
     programPage.setBounds (r);
+    synthPage.setBounds (r);
 
-    performHeading.setBounds (r.removeFromTop (18));
-    r.removeFromTop (6);
+    performHeading.setBounds (r.removeFromTop (16));
+    r.removeFromTop (8);
 
     /*
-     * An envelope with its heading above it, and - for the filter - its two knobs stacked in
-     * a narrow column on the right.
+     * THE PERFORM TAB, AS THREE ROWS OF PANELS
      *
-     * Side by side rather than one above the other. Two full-width graphs ate the whole
-     * window for four numbers each, and there is more to put here than envelopes.
+     *   row 1   FILTER | LFO | VELOCITY            the offsets, cyan
+     *   row 2   GLIDE & POLYPHONY | WIDE           the extras, violet
+     *   row 3   VCA ENVELOPE | VCF ENVELOPE        the offsets again, as shapes
      *
-     * The knobs belong to the filter's column because that is what they are: cutoff and
-     * amount are the filter's other two numbers, and anywhere else means hunting for them.
+     * One knob cell is 78 wide; a panel is its knobs plus padding, and the rows share the
+     * width in proportion to what they hold, so nothing is stretched to fill.
      */
-    auto placeEnvelope = [this] (juce::Rectangle<int> area, juce::Label& heading,
-                                 EnvelopeEditor& envelope, const char* group)
+    constexpr int cellW = 84, cellH = 104, gap = 10;
+    const int headroom = look::Panel::headerHeight + 8;
+
+    /// A knob and its caption in one cell, the caption under the value.
+    auto placeKnob = [cellW] (juce::Rectangle<int> cell, juce::Slider& s, juce::Label& l)
     {
-        heading.setBounds (area.removeFromTop (16));
-        area.removeFromTop (4);
-
-        int count = 0;
-        for (const auto& k : knobs)
-            if (juce::String (k.group) == group) ++count;
-
-        if (count > 0)
-        {
-            auto column = area.removeFromRight (78);
-            area.removeFromRight (8);
-
-            // Capped, so a single knob sits at the top of the column at a sensible size
-            // rather than being stretched down the whole height of the graph beside it.
-            const int cell = std::min (100, column.getHeight() / count);
-
-            for (auto& k : knobs)
-            {
-                if (juce::String (k.group) != group) continue;
-
-                auto one = column.removeFromTop (cell);
-                k.label->setBounds (one.removeFromBottom (13));
-                k.slider->setBounds (one.reduced (1));
-            }
-        }
-
-        envelope.setBounds (area);
+        cell = cell.withSizeKeepingCentre (juce::jmin (cell.getWidth(), cellW), cell.getHeight());
+        l.setBounds (cell.removeFromBottom (13));
+        s.setBounds (cell.reduced (1));
     };
 
-    // One row across the bottom holding both, so the space above stays free for whatever
-    // comes next.
-    auto shapes = r.removeFromBottom (196);
-
-    auto half = shapes.removeFromLeft (shapes.getWidth() / 2 - 8);
-    shapes.removeFromLeft (16);
-
-    placeEnvelope (half,   vcaHeading, vcaEnvelope, "VCA");
-    placeEnvelope (shapes, vcfHeading, vcfEnvelope, "VCF");
-
     /*
-     * The sample controls get a row of their own above the envelopes, with room in it.
-     *
-     * Filter is not an envelope parameter - it is where each sample's filter sits, which the
-     * envelope then moves away from - and beside the graph it read as though it were. The
-     * space to its right is deliberate: this is where the rest of the per-sample controls go.
+     * `n` equal cells across an area, so a panel's controls sit evenly in it rather than
+     * bunching at its left with a blank to their right. A knob keeps its own size inside
+     * its cell; only the spacing stretches.
      */
-    /*
-     * The LFO and the velocity controls share one strip, side by side.
-     *
-     * Three knobs and two do not fill a row each, and stacking them would have cost another
-     * 120 px of window for 430 px of knobs. Side by side they read as the two groups they
-     * are - what the instrument does on its own, and what it does in answer to how you play.
-     */
-    r.removeFromBottom (14);
-    auto performance = r.removeFromBottom (108);
-    auto lfo         = performance.removeFromLeft (3 * 86);
-    performance.removeFromLeft (24);
-    auto velocity    = performance;
-
-    r.removeFromBottom (12);
-    auto samples = r.removeFromBottom (108);
-
-    // Wide in the space that was left above, so the window did not have to grow for it.
-    r.removeFromBottom (12);
-    auto wideRow = r.removeFromBottom (108);
-
-    wideHeading.setBounds (wideRow.removeFromTop (16));
-    wideRow.removeFromTop (4);
-
-    wideButton.setBounds (wideRow.removeFromLeft (78).withSizeKeepingCentre (64, 24));
-    wideRow.removeFromLeft (8);
-
-    for (const auto& pair : { std::make_pair (&wideDetune, &wideDetuneLabel),
-                              std::make_pair (&wideSpread, &wideSpreadLabel) })
+    auto cellsAcross = [] (juce::Rectangle<int> area, int n)
     {
-        auto cell = wideRow.removeFromLeft (78);
-        pair.second->setBounds (cell.removeFromBottom (13));
-        pair.first->setBounds (cell.reduced (1));
-        wideRow.removeFromLeft (8);
+        std::vector<juce::Rectangle<int>> cells;
+        for (int i = 0; i < n; ++i)
+            cells.push_back (juce::Rectangle<int> (area.getX() + area.getWidth() * i / n, area.getY(),
+                                                   area.getWidth() / n, area.getHeight()));
+        return cells;
+    };
+
+    /// Every offset knob of one group, spread across a panel's content area.
+    auto placeGroup = [&] (const look::Panel& panel, const char* group)
+    {
+        std::vector<Knob*> mine;
+        for (auto& k : knobs)
+            if (juce::String (k.group) == group) mine.push_back (&k);
+
+        const auto cells = cellsAcross (panel.content(), (int) mine.size());
+        for (size_t i = 0; i < mine.size(); ++i)
+            placeKnob (cells[i], *mine[i]->slider, *mine[i]->label);
+    };
+
+    // --- row 1: the offsets, in three panels sized to what they hold - one, three and two
+    auto row1 = r.removeFromTop (cellH + headroom);
+    const int unit = (row1.getWidth() - 2 * gap) / 6;
+
+    filterPanel.setBounds (row1.removeFromLeft (unit));
+    row1.removeFromLeft (gap);
+    velocityPanel.setBounds (row1.removeFromRight (unit * 2));
+    row1.removeFromRight (gap);
+    lfoPanel.setBounds (row1);
+
+    placeGroup (filterPanel,   "SAMPLE");
+    placeGroup (lfoPanel,      "LFO");
+    placeGroup (velocityPanel, "VELOCITY");
+
+    // --- row 2: the extras, violet, and told apart from the row above by it
+    r.removeFromTop (gap);
+    auto row2 = r.removeFromTop (cellH + headroom);
+
+    glidePanel.setBounds (row2.removeFromLeft (unit * 3));
+    row2.removeFromLeft (gap);
+    widePanel.setBounds (row2);
+
+    {
+        const auto cells = cellsAcross (glidePanel.content(), 3);
+        glideButton.setBounds (cells[0].withSizeKeepingCentre (juce::jmin (cells[0].getWidth(), 76), 24));
+        placeKnob (cells[1], glideTime,  glideTimeLabel);
+        placeKnob (cells[2], voiceCount, voiceCountLabel);
+    }
+    {
+        const auto cells = cellsAcross (widePanel.content(), 4);
+        wideButton.setBounds (cells[0].withSizeKeepingCentre (juce::jmin (cells[0].getWidth(), 76), 24));
+        placeKnob (cells[1], wideDetune, wideDetuneLabel);
+        placeKnob (cells[2], wideSpread, wideSpreadLabel);
+        offsetButton.setBounds (cells[3].withSizeKeepingCentre (juce::jmin (cells[3].getWidth(), 112), 24));
     }
 
-    offsetButton.setBounds (wideRow.removeFromLeft (120).withSizeKeepingCentre (116, 24));
+    // --- row 3: the two envelopes as shapes, the filter's with its Amount beside it. The
+    // row takes what is left, which the window's height was chosen to make about right.
+    r.removeFromTop (gap);
+    auto row3 = r;
 
-    /*
-     * A row of knobs under a heading, laid out left to right.
-     *
-     * Both rows do the same thing and neither fills its width, which is deliberate: they are
-     * where the rest of the per-sample and per-LFO controls will go.
-     */
-    auto placeRow = [this] (juce::Rectangle<int> area, juce::Label& heading, const char* group)
+    vcaPanel.setBounds (row3.removeFromLeft (row3.getWidth() / 2 - gap / 2));
+    row3.removeFromLeft (gap);
+    vcfPanel.setBounds (row3);
+
+    vcaEnvelope.setBounds (vcaPanel.content());
+
     {
-        heading.setBounds (area.removeFromTop (16));
-        area.removeFromTop (4);
+        auto area = vcfPanel.content();
+        auto side = area.removeFromRight (cellW);
+        area.removeFromRight (6);
 
         for (auto& k : knobs)
-        {
-            if (juce::String (k.group) != group) continue;
+            if (juce::String (k.group) == "VCF")
+                placeKnob (side.removeFromTop (cellH), *k.slider, *k.label);
 
-            auto cell = area.removeFromLeft (78);
-            k.label->setBounds (cell.removeFromBottom (13));
-            k.slider->setBounds (cell.reduced (1));
-            area.removeFromLeft (8);
-        }
-    };
-
-    // Filter keeps its own cell at the left; glide takes the space the row was left with.
-    auto filterCell = samples.removeFromLeft (86);
-    samples.removeFromLeft (24);
-
-    placeRow (filterCell, sampleHeading, "SAMPLE");
-
-    glideHeading.setBounds (samples.removeFromTop (16));
-    samples.removeFromTop (4);
-
-    auto switchCell = samples.removeFromLeft (78);
-    glideButton.setBounds (switchCell.withSizeKeepingCentre (64, 24));
-    samples.removeFromLeft (8);
-
-    auto timeCell = samples.removeFromLeft (78);
-    glideTimeLabel.setBounds (timeCell.removeFromBottom (13));
-    glideTime.setBounds (timeCell.reduced (1));
-    samples.removeFromLeft (8);
-
-    auto voicesCell = samples.removeFromLeft (78);
-    voiceCountLabel.setBounds (voicesCell.removeFromBottom (13));
-    voiceCount.setBounds (voicesCell.reduced (1));
-    placeRow (lfo,      lfoHeading,      "LFO");
-    placeRow (velocity, velocityHeading, "VELOCITY");
+        vcfEnvelope.setBounds (area);
+    }
 }

@@ -96,9 +96,13 @@ target_sources(VirtualS950 PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/ProgramPage.cpp
+    Source/SynthPage.cpp
+    Source/Look.cpp
     Source/S950/Voice.cpp
     Source/S950/Engine.cpp
     Source/S950/Disk.cpp
+    Source/S950/Synth.cpp
+    Source/S950/SynthPatch.cpp
     Source/S950/Hfe.cpp)
 
 target_include_directories(VirtualS950 PRIVATE Source)

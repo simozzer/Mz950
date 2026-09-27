@@ -23,6 +23,15 @@ namespace s950
     struct Sound
     {
         std::string        name;
+
+        /*
+         * A hash of the bytes this was decoded from, so a rebuilt programme can tell a
+         * sample that is the same from one that merely has the same name - the Synth tab
+         * re-renders "OSC1" with different audio under the same name every time a wave knob
+         * moves. Reusing an unchanged sample's Sound is what lets a held note follow an edit
+         * in place (Voice::adopt keeps a note only on the sound it started with).
+         */
+        unsigned long long fingerprint = 0;
         std::vector<float> audio;            // -1 .. +1
         int                sourceRate = 40000;   // hertz, as stored on the disk
         double             rootPitch  = 60.0;    // the MIDI note at which it plays at sourceRate
