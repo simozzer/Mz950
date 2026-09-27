@@ -289,10 +289,12 @@ says so rather than leaving you wondering why a file will not open. Stereo is mi
 
 The conversion is: mix to mono, resample (windowed-sinc, with the low-pass widened when
 converting downwards so it does not alias), optionally normalise, then quantise to signed
-12-bit. Anything above 44.1 kHz is brought down to it, since that is the sampler's ceiling.
+12-bit. Anything above 48 kHz is brought down to it, since that is the S950's top rate; a
+48 kHz file is kept as it is.
 
-The rate list offers **12,500 Hz up to 44,100 Hz**, plus "keep the source rate" — the values
-the corpus actually contains, minus the one-off oddities that look like varispeed. Dropping
+The rate list offers **12,500 Hz up to 48,000 Hz**, plus "keep the source rate" — the values
+the corpus actually contains, minus the one-off oddities that look like varispeed, and the
+S950's own 48 kHz, which the library never happens to use. Dropping
 the rate is the most effective way to fit more on a disk: the same free space that holds 1.86
 seconds at 44.1 kHz holds 6.59 seconds at 12,500 Hz.
 

@@ -135,20 +135,30 @@ namespace AkaiS950Studio
         /// an image of nothing but zeroes is already a formatted blank - which is what the
         /// web version makes too. It is not written anywhere until it is saved.
         /// </summary>
-        void OnNewImage(object sender, EventArgs e)
+        void OnNewImage(object sender, EventArgs e) { NewImage(false); }
+
+        /// <summary>
+        /// A new, empty 1600K high-density image - the S950 formats both. Zeroes are a blank
+        /// here too: the five-block header is the 800K one with the allocation table carried
+        /// on to 1600 entries, and akaiutil's formatfloppyh9 writes the same.
+        /// </summary>
+        void OnNewHdImage(object sender, EventArgs e) { NewImage(true); }
+
+        void NewImage(bool highDensity)
         {
             int n = 1;
+            string stem = highDensity ? "new-hd-disk" : "new-disk";
             string name;
             do
             {
-                name = n == 1 ? "new-disk.img" : "new-disk-" + n + ".img";
+                name = n == 1 ? stem + ".img" : stem + "-" + n + ".img";
                 n++;
             }
             while (_disks.Exists(d => string.Equals(
                 System.IO.Path.GetFileName(d.Source), name, StringComparison.OrdinalIgnoreCase)));
 
             AkaiDisk made;
-            try { made = AkaiDisk.LoadFromBytes(name, new byte[800 * 1024]); }
+            try { made = AkaiDisk.LoadFromBytes(name, new byte[(highDensity ? AkaiDisk.HdBlocks : AkaiDisk.DdBlocks) * AkaiDisk.BlockSize]); }
             catch (Exception ex)
             {
                 SetStatus("Could not make a blank image: " + ex.Message);

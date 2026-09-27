@@ -589,12 +589,6 @@ namespace AkaiS950Studio
         }
 
         /// <summary>
-        /// Sample rates to offer on import. These are the values the 101-image corpus
-        /// actually contains, dropping the one-off oddities that look like varispeed
-        /// rather than a chosen setting. The library runs from 11,773 Hz to 44,329 Hz;
-        /// 12,500 Hz is the lowest of the regular 1,250 Hz grid values present.
-        /// </summary>
-        /// <summary>
         /// Where a complex sample should be cut into one-shots.
         ///
         /// A peak envelope on a short hop, tracked by a decaying peak-follower. A slice starts
@@ -664,10 +658,23 @@ namespace AkaiS950Studio
             if (outp.Count == 0 || outp[0] > minGap) outp.Insert(0, 0); else outp[0] = 0;
             return outp;
         }
+        /// <summary>
+        /// Sample rates to offer on import. These are the values the 101-image corpus
+        /// actually contains, dropping the one-off oddities that look like varispeed
+        /// rather than a chosen setting. The library runs from 11,773 Hz to 44,329 Hz;
+        /// 12,500 Hz is the lowest of the regular 1,250 Hz grid values present.
+        ///
+        /// Plus 48,000 Hz, which the library never uses but the S950 samples at: it is the
+        /// machine's top rate (the S900's was 40 kHz). Leaving it off made every 48 kHz file
+        /// come down to 44.1 on import for no reason.
+        /// </summary>
         public static readonly int[] KnownRates =
         {
             12500, 17500, 20000, 22050, 22500, 23750, 25000, 27500, 30000,
-            32500, 33750, 35000, 36250, 37500, 38750, 40000, 44100
+            32500, 33750, 35000, 36250, 37500, 38750, 40000, 44100, 48000
         };
+
+        /// <summary>The fastest rate the S950 samples at, and so the most a sample needs.</summary>
+        public const int MaxRate = 48000;
     }
 }

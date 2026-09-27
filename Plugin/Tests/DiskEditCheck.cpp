@@ -669,6 +669,70 @@ int main (int argc, char** argv)
         std::printf ("  edited copy written to %s and read back\n", argv[2]);
     }
 
+    /*
+     * A high-density disk: 1600 blocks, a five-block header, and a FAT of 1600 entries
+     * that is the DD one carried on past its 800th (akaiutil's akai_flhhead_s). Filled past
+     * block 800 so the second half of the table is exercised, then read back byte for byte.
+     * With a third argument the image is saved there, for akaiutil to read.
+     */
+    std::printf ("  a high-density disk\n");
+    {
+        Disk d = Disk::blank ("HD", true);
+        std::string why;
+
+        ++checks; if (d.getImage().size() != 1638400) fail ("hd", "1600K", static_cast<int> (d.getImage().size() / 1024), 1600);
+        ++checks; if (! d.isHighDensity() || d.headerBlocks() != 5) fail ("hd", "a five-block header", d.headerBlocks(), 5);
+
+        std::vector<std::vector<short>> waves;
+        for (int k = 0; k < 6; ++k)
+        {
+            std::vector<short> w (140000);
+            for (int i = 0; i < 140000; ++i)
+                w[static_cast<std::size_t> (i)] = static_cast<short> (((i * (k + 3)) % 4096) - 2048);
+            waves.push_back (w);
+
+            Disk::NewSample s; s.name = "HD" + std::to_string (k); s.words12 = w; s.rate = 48000;
+            ++checks; if (! d.addSample (s, why)) fail ("hd", ("sample " + std::to_string (k) + ": " + why).c_str(), 0, 1);
+        }
+        ++checks; if (! d.addProgram ("HD PROG", 1, why)) fail ("hd", why.c_str(), 0, 1);
+
+        // nothing starts inside the header, and the files reach past block 800
+        int lowest = 1 << 30, highest = 0;
+        for (const auto& e : d.getEntries())
+        {
+            lowest = std::min (lowest, e.startBlock);
+            highest = std::max (highest, e.startBlock + e.chainBlocks - 1);
+        }
+        ++checks; if (lowest != 5) fail ("hd", "file data starts at block 5", lowest, 5);
+        ++checks; if (highest <= 800) fail ("hd", "the files reach past block 800", highest, 801);
+
+        // read back from the bytes alone, as a saved disk would be
+        Disk back;
+        ++checks;
+        if (! back.loadBytes ("HD", d.getImage(), why)) fail ("hd", ("reload: " + why).c_str(), 0, 1);
+        else
+        {
+            ++checks; if (back.getEntries().size() != 7) fail ("hd", "seven files come back", static_cast<int> (back.getEntries().size()), 7);
+            for (int k = 0; k < 6; ++k)
+            {
+                const Disk::Entry* e = back.find ("HD" + std::to_string (k), 'S');
+                ++checks;
+                if (e == nullptr) { fail ("hd", "a sample comes back by name", 0, 1); continue; }
+                ++checks; if (e->sampleRate != 48000) fail ("hd", "48 kHz survives", e->sampleRate, 48000);
+                const auto got = back.sampleWords12 (*e);
+                ++checks;
+                if (got != waves[static_cast<std::size_t> (k)]) fail ("hd", ("sample " + std::to_string (k) + " audio round-trips").c_str(), static_cast<int> (got.size()), 140000);
+            }
+        }
+
+        if (argc > 3)
+        {
+            std::ofstream out (argv[3], std::ios::binary);
+            out.write (reinterpret_cast<const char*> (d.getImage().data()), static_cast<std::streamsize> (d.getImage().size()));
+            std::printf ("  high-density image written to %s\n", argv[3]);
+        }
+    }
+
     std::printf ("  %d checks, %d failed\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

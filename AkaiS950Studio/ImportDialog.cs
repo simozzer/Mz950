@@ -89,10 +89,10 @@ namespace AkaiS950Studio
             _rate.DropDownStyle = ComboBoxStyle.DropDownList;
             _rate.Items.Add("Keep " + _clip.SampleRate.ToString("N0") + " Hz");
             foreach (int r in AudioImport.KnownRates) _rate.Items.Add(r.ToString("N0") + " Hz");
-            // The sampler tops out at 44.1 kHz, so anything faster has to come down.
-            _rate.SelectedIndex = _clip.SampleRate <= 44100
+            // The S950 samples at up to 48 kHz, so only something faster has to come down.
+            _rate.SelectedIndex = _clip.SampleRate <= AudioImport.MaxRate
                 ? 0
-                : 1 + Array.IndexOf(AudioImport.KnownRates, 44100);
+                : 1 + Array.IndexOf(AudioImport.KnownRates, AudioImport.MaxRate);
             _rate.SelectedIndexChanged += (s, e) => Recalculate();
             Controls.Add(_rate);
             y += 32;

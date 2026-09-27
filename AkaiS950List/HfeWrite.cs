@@ -149,15 +149,24 @@ namespace AkaiS950List
             0x01, 0x00      // track list at block 1
         };
 
-        const int SectorsPerTrack = 5, SectorSize = 1024;
-        const int TrackBytes = 25000;      // both sides, interleaved
-        const int SideBytes = 6250;        // MFM bytes per side
-        const int TrackStride = 25088;     // 49 blocks of 512
+        /*
+         * Double density is 5 sectors a track at 250 kbps; high density is 10 at 500 kbps,
+         * so an HD side holds twice the MFM bytes. Every size below follows from sideBytes:
+         * the cells are twice that (16 cells a byte, packed 8 to a cell byte), a track's two
+         * sides interleave in 256-byte halves of 512-byte blocks, and the track list gives
+         * each track a whole number of those blocks.
+         */
+        const int SectorSize = 1024;
+        const int DdSectorsPerTrack = 5, HdSectorsPerTrack = 10;
         const byte Gap = 0x4E, Sync = 0x00, IamMark = 0xFC, Idam = 0xFE, Dam = 0xFB;
 
+        static int SideBytesFor(int spt) { return spt > DdSectorsPerTrack ? 12500 : 6250; }
+        static int TrackStrideFor(int spt) { return (SideBytesFor(spt) * 2 + 255) / 256 * 512; }
+
         /// <summary>The MFM cell stream for one side of one track, laid out from scratch.</summary>
-        static byte[] BuildSide(byte[] image, int cyl, int head, int sides)
+        static byte[] BuildSide(byte[] image, int cyl, int head, int sides, int SectorsPerTrack)
         {
+            int SideBytes = SideBytesFor(SectorsPerTrack);
             var bits = new byte[SideBytes * 16];
             int at = 0, prev = 0;
 
@@ -225,7 +234,9 @@ namespace AkaiS950List
                 put(Gap, 86);
             }
 
-            put(Gap, 94);
+            // The rest of the track is gap: 94 bytes on DD, as the library's disks have it,
+            // and correspondingly more on an HD track twice as long.
+            put(Gap, SideBytes - at / 16);
 
             if (at != bits.Length)
                 throw new InvalidOperationException(
@@ -240,8 +251,24 @@ namespace AkaiS950List
         /// </summary>
         public static byte[] BuildHfe(byte[] image, int tracks, int sides)
         {
+            if (sides <= 0) sides = 2;
+            if (tracks <= 0) tracks = 80;
+
+            // 1600K of sectors over 80 cylinders and two sides is ten a track: high density.
+            int spt = image.Length > tracks * sides * DdSectorsPerTrack * SectorSize
+                ? HdSectorsPerTrack : DdSectorsPerTrack;
+            return BuildHfe(image, tracks, sides, spt);
+        }
+
+        /// <summary>BuildHfe with the sectors per track given: 5 for DD, 10 for HD.</summary>
+        public static byte[] BuildHfe(byte[] image, int tracks, int sides, int spt)
+        {
             if (tracks <= 0) tracks = 80;
             if (sides <= 0) sides = 2;
+
+            int SideBytes = SideBytesFor(spt);
+            int TrackBytes = SideBytes * 4;          // both sides' cells, interleaved
+            int TrackStride = TrackStrideFor(spt);
 
             int size = 1024 + tracks * TrackStride;
             var outp = new byte[size];
@@ -250,6 +277,9 @@ namespace AkaiS950List
             Array.Copy(HfeHeader, 0, outp, 0, HfeHeader.Length);
             outp[9] = (byte)tracks;
             outp[10] = (byte)sides;
+            int kbps = spt > DdSectorsPerTrack ? 500 : 250;
+            outp[12] = (byte)(kbps & 0xFF);
+            outp[13] = (byte)(kbps >> 8);
 
             // Each side is 12500 cell bytes, which is 48 whole 256-byte chunks and then 212 of
             // one - so 44 bytes of every side's last chunk are padding that WriteSideCells never
@@ -271,7 +301,7 @@ namespace AkaiS950List
 
             for (int t = 0; t < tracks; t++)
                 for (int s = 0; s < sides; s++)
-                    HfeImage.WriteSideCells(outp, t, s, BuildSide(image, t, s, sides));
+                    HfeImage.WriteSideCells(outp, t, s, BuildSide(image, t, s, sides, spt));
 
             return outp;
         }

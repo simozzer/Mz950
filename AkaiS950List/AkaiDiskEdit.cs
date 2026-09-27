@@ -600,7 +600,7 @@ namespace AkaiS950List
         /// <summary>
         /// The image to write out, in either container.
         ///
-        ///   img - the 800K sector image as the sampler sees it. Always available: it is
+        ///   img - the 800K or 1600K sector image as the sampler sees it. Always available: it is
         ///         exactly the bytes this object has been editing. FlashFloppy reads these.
         ///   hfe - the Gotek/HxC container. With the HFE this disk came from, that template
         ///         is patched sector by sector, so its bitstream, gaps and sync marks are
@@ -615,7 +615,7 @@ namespace AkaiS950List
             if (want != "hfe") throw new ArgumentException("unknown format '" + format + "'", "format");
 
             if (IsHfe && RawHfe != null) return PatchHfe();
-            return HfeWrite.BuildHfe(Image, Image.Length / (SectorsPerTrack * 2 * BlockSize), 2);
+            return HfeWrite.BuildHfe(Image, Image.Length / (SectorsPerTrack * 2 * BlockSize), 2, SectorsPerTrack);
         }
 
         /// <summary>Both containers can always be written, now that an HFE can be built from nothing.</summary>
@@ -631,8 +631,8 @@ namespace AkaiS950List
             File.WriteAllBytes(path, BuildImage(format));
         }
 
-        /// <summary>Sectors per track, which the Akai format fixes at five 1024-byte sectors.</summary>
-        public const int SectorsPerTrack = 5;
+        /// <summary>Sectors per track: five 1024-byte sectors on a DD disk, ten on an HD one.</summary>
+        public int SectorsPerTrack { get { return IsHighDensity ? 10 : 5; } }
 
         /// <summary>
         /// The HFE this disk was loaded from, with every sector's data field rewritten where

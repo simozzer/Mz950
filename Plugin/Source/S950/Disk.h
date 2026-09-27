@@ -53,11 +53,17 @@ namespace s950
     const KeygroupParamInfo& keygroupParamInfo (KeygroupParam p);
 
     /*
-     * An 800K Akai S900/S950 floppy: 80 cylinders x 2 heads x 5 sectors of 1024 bytes.
+     * An Akai S900/S950 floppy, in either density the S950 formats:
      *
-     * Block 0 holds a 64-entry directory at 0x000 and a 16-bit allocation table at 0x600;
-     * file data starts at block 4. A file's blocks are a chain through that table rather
-     * than a run, so a file is not contiguous and cannot be read as one.
+     *     double density   800K  = 80 cylinders x 2 heads x  5 sectors of 1024 bytes
+     *     high density    1600K  = 80 cylinders x 2 heads x 10 sectors of 1024 bytes
+     *
+     * Block 0 holds a 64-entry directory at 0x000 and a 16-bit allocation table at 0x600,
+     * one entry per block - 800 on DD, 1600 on HD - so the header is 4 blocks on one and 5
+     * on the other, and file data starts at headerBlocks(). The two are identical up to the
+     * 800th entry (akaiutil's akai_fllhead_s and akai_flhhead_s). A file's blocks are a chain
+     * through that table rather than a run, so a file is not contiguous and cannot be read
+     * as one.
      *
      * The reading half of AkaiS950List, ported - and one narrow kind of writing.
      *
@@ -316,8 +322,8 @@ namespace s950
          * anything, which is the only way they cannot drift.
          */
 
-        /// 800K of nothing, ready to be written to.
-        static Disk blank (std::string name = "NEW DISK");
+        /// 800K of nothing, ready to be written to - or 1600K, with highDensity.
+        static Disk blank (std::string name = "NEW DISK", bool highDensity = false);
 
         struct NewSample
         {
@@ -403,6 +409,17 @@ namespace s950
         void readSampleHeader (Entry& e) const;
 
         int  totalBlocks() const { return static_cast<int> (image.size()) / BlockSize; }
+
+    public:
+        static constexpr int DdBlocks = 800, HdBlocks = 1600;
+
+        /// A high-density (1600K) disk rather than a double-density (800K) one.
+        bool isHighDensity() const { return totalBlocks() > DdBlocks; }
+
+        /// The directory-and-FAT header, and where file data starts: 4 blocks on DD, 5 on HD.
+        int  headerBlocks() const  { return isHighDensity() ? 5 : 4; }
+
+    private:
 
         unsigned int u32 (std::size_t at) const;
         unsigned int u16 (std::size_t at) const;

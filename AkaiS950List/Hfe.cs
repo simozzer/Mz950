@@ -140,19 +140,36 @@ namespace AkaiS950List
 
         /// <summary>
         /// Decode every track and lay the sectors out linearly:
-        /// LBA = (cyl * sides + head) * 5 + (sec - 1), 1024 bytes each.
+        /// LBA = (cyl * sides + head) * spt + (sec - 1), 1024 bytes each.
+        ///
+        /// spt is 5 on a double-density disk (800K) and 10 on a high-density one (1600K) -
+        /// the S950 formats both. The disk says which: every track is decoded first and the
+        /// highest sector number found decides it, rather than the header's bit rate.
         /// </summary>
         public static byte[] Extract(byte[] raw, out int badCrc, out int missing)
         {
-            const int Spt = 5, Ssz = 1024;
+            const int Ssz = 1024;
             int tracks = raw[9], sides = raw[10];
+
+            var decoded = new List<List<Sect>>();
+            int highest = 0;
+            for (int t = 0; t < tracks; t++)
+                for (int s = 0; s < sides; s++)
+                {
+                    var list = DecodeTrack(SideCells(raw, t, s));
+                    decoded.Add(list);
+                    foreach (var sec in list)
+                        if (sec.Data != null && sec.Sec >= 1 && sec.Sec <= 10 && sec.Sec > highest) highest = sec.Sec;
+                }
+
+            int Spt = highest > 5 ? 10 : 5;
             var img = new byte[tracks * sides * Spt * Ssz];
             var got = new bool[tracks * sides * Spt];
             badCrc = 0;
 
             for (int t = 0; t < tracks; t++)
                 for (int s = 0; s < sides; s++)
-                    foreach (var sec in DecodeTrack(SideCells(raw, t, s)))
+                    foreach (var sec in decoded[t * sides + s])
                     {
                         if (sec.Data == null) continue;
                         if (sec.Sec < 1 || sec.Sec > Spt || sec.Cyl >= tracks || sec.Head >= sides) continue;

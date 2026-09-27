@@ -445,13 +445,14 @@ namespace s950
         }
     }
 
-    Disk Disk::blank (std::string name)
+    Disk Disk::blank (std::string name, bool highDensity)
     {
         // An S950 disk is empty when its directory and allocation table are zero, so an
-        // image of nothing but zeroes is already a formatted blank.
+        // image of nothing but zeroes is already a formatted blank - on either density.
         Disk d;
         std::string error;
-        d.loadBytes (std::move (name), std::vector<unsigned char> (819200, 0), error);
+        const int blocks = highDensity ? HdBlocks : DdBlocks;
+        d.loadBytes (std::move (name), std::vector<unsigned char> (static_cast<std::size_t> (blocks) * BlockSize, 0), error);
         return d;
     }
 
@@ -530,7 +531,7 @@ namespace s950
 
         const int need = std::max (1, static_cast<int> ((contents.size() + BlockSize - 1) / BlockSize));
         std::vector<int> free;
-        for (int b = 4; b < totalBlocks() && static_cast<int> (free.size()) < need; ++b)
+        for (int b = headerBlocks(); b < totalBlocks() && static_cast<int> (free.size()) < need; ++b)
             if (fat (b) == 0) free.push_back (b);
 
         if (static_cast<int> (free.size()) < need)

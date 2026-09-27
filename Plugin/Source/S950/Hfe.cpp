@@ -188,7 +188,7 @@ namespace s950::hfe
     std::vector<unsigned char> extract (const std::vector<unsigned char>& raw,
                                         int& badCrc, int& missing)
     {
-        constexpr int Spt = 5, Ssz = 1024;
+        constexpr int Ssz = 1024;
 
         badCrc  = 0;
         missing = 0;
@@ -200,6 +200,25 @@ namespace s950::hfe
 
         if (tracks <= 0 || sides <= 0) return {};
 
+        /*
+         * Five sectors a track on a double-density disk (800K) and ten on a high-density one
+         * (1600K) - the S950 formats both. The disk says which: decode every track first and
+         * see how high the sector numbers go, rather than trusting the header's bit rate.
+         */
+        std::vector<std::vector<Sector>> decoded;
+        decoded.reserve (static_cast<std::size_t> (tracks * sides));
+        int highest = 0;
+
+        for (int t = 0; t < tracks; ++t)
+            for (int s = 0; s < sides; ++s)
+            {
+                decoded.push_back (decodeTrack (sideCells (raw, t, s)));
+                for (const auto& sec : decoded.back())
+                    if (! sec.data.empty() && sec.sec >= 1 && sec.sec <= 10)
+                        highest = std::max (highest, static_cast<int> (sec.sec));
+            }
+
+        const int Spt = highest > 5 ? 10 : 5;
         const std::size_t sectors = static_cast<std::size_t> (tracks) * sides * Spt;
 
         std::vector<unsigned char> img (sectors * Ssz, 0);
@@ -209,7 +228,7 @@ namespace s950::hfe
         {
             for (int s = 0; s < sides; ++s)
             {
-                for (const auto& sec : decodeTrack (sideCells (raw, t, s)))
+                for (const auto& sec : decoded[static_cast<std::size_t> (t * sides + s)])
                 {
                     if (sec.data.empty()) continue;
                     if (sec.sec < 1 || sec.sec > Spt) continue;

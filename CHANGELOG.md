@@ -6,6 +6,30 @@ Every number here came off a recording of a real S950 rather than out of a manua
 a change is a measurement it says what was measured and what it replaced. Where it is an
 assumption it says that too — those are the ones another afternoon with a recorder settles.
 
+## Unreleased
+
+### High-density disks
+
+The S950 formats 1600K high-density floppies as well as 800K double-density ones, and both
+the plugin and the Studio now read and write them.
+
+- The layout is akaiutil's (`akai_flhhead_s`): 1600 blocks, 10 sectors a track, the same
+  directory with the allocation table carried on to 1600 entries - which makes the header
+  five blocks rather than four, so file data starts at block 5.
+- .hfe images of either density decode: the sectors per track are read off the disk itself.
+  The Studio writes HD .hfe at 500 kbps with ten sectors a track; DD output is unchanged.
+- **File → New HD Disk Image (1600K)** in the Studio.
+- Checked against akaiutil, built from source: it reads an HD disk written here - files up
+  past block 1000 extracted byte for byte - and a disk it formatted with `formatfloppyh9`,
+  with samples it put there, reads here with the audio intact.
+
+### 48 kHz on import
+
+The Studio's import assumed the sampler stopped at 44.1 kHz and brought every 48 kHz file down
+to it. The S950 samples at up to 48 kHz: a 48 kHz file now keeps its rate, 48,000 Hz is in the
+rate list, and only faster files come down - to 48 kHz. (Reading and playing 48 kHz samples
+already worked.)
+
 ## v0.5.0 — 2026-09-27
 
 The release where VirtualS950 became Mz950, grew a Synth tab and a Program tab, and was held

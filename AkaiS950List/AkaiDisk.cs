@@ -74,9 +74,16 @@ namespace AkaiS950List
     }
 
     /// <summary>
-    /// An 800K Akai S900/S950 floppy: 80 cylinders x 2 heads x 5 sectors of 1024 bytes.
-    /// Block 0 holds a 64-entry directory at 0x000 and a 16-bit FAT at 0x600;
-    /// file data starts at block 4.
+    /// An Akai S900/S950 floppy, in either density the S950 formats:
+    ///
+    ///   double density   800K  = 80 cylinders x 2 heads x  5 sectors of 1024 bytes
+    ///   high density    1600K  = 80 cylinders x 2 heads x 10 sectors of 1024 bytes
+    ///
+    /// Block 0 holds a 64-entry directory at 0x000 and a 16-bit FAT at 0x600, one entry per
+    /// block of the disk - so 800 entries on a DD disk and 1600 on an HD one, which is why
+    /// the header is 4 blocks on one and 5 on the other and file data starts at
+    /// HeaderBlocks. The two headers are identical up to the 800th FAT entry. (akaiutil's
+    /// akai_fllhead_s / akai_flhhead_s; the label after the FAT is all zero on an S900/S950.)
     /// </summary>
     public sealed partial class AkaiDisk
     {
@@ -124,18 +131,26 @@ namespace AkaiS950List
 
         public int TotalBlocks { get { return Image.Length / BlockSize; } }
 
-        /// <summary>Data blocks (4 and above) with no allocation-table entry.</summary>
+        public const int DdBlocks = 800, HdBlocks = 1600;
+
+        /// <summary>Whether this is a high-density (1600K) disk rather than a DD (800K) one.</summary>
+        public bool IsHighDensity { get { return TotalBlocks > DdBlocks; } }
+
+        /// <summary>The directory-and-FAT header: 4 blocks on DD, 5 on HD. Data starts here.</summary>
+        public int HeaderBlocks { get { return IsHighDensity ? 5 : 4; } }
+
+        /// <summary>Data blocks (from HeaderBlocks up) with no allocation-table entry.</summary>
         public int FreeBlocks
         {
             get
             {
                 int n = 0;
-                for (int b = 4; b < TotalBlocks; b++) if (Fat(b) == 0) n++;
+                for (int b = HeaderBlocks; b < TotalBlocks; b++) if (Fat(b) == 0) n++;
                 return n;
             }
         }
 
-        public int UsedBlocks { get { return TotalBlocks - 4 - FreeBlocks; } }
+        public int UsedBlocks { get { return TotalBlocks - HeaderBlocks - FreeBlocks; } }
 
         int Fat(int block)
         {
@@ -880,7 +895,7 @@ namespace AkaiS950List
 
             int need = BlocksFor(contents.Length);
             var free = new List<int>();
-            for (int b = 4; b < TotalBlocks && free.Count < need; b++)
+            for (int b = HeaderBlocks; b < TotalBlocks && free.Count < need; b++)
                 if (Fat(b) == 0) free.Add(b);
             if (free.Count < need)
                 throw new InvalidOperationException(
@@ -1327,7 +1342,7 @@ namespace AkaiS950List
             {
                 int wanted = need - chain.Count;
                 var extra = new List<int>();
-                for (int b = 4; b < TotalBlocks && extra.Count < wanted; b++)
+                for (int b = HeaderBlocks; b < TotalBlocks && extra.Count < wanted; b++)
                     if (Fat(b) == 0) extra.Add(b);
 
                 if (extra.Count < wanted)

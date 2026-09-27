@@ -305,6 +305,8 @@ namespace AkaiS950Studio
             var openFolder = new ToolStripMenuItem("Open &Folder...", null, OnOpenFolder)
             { ShortcutKeys = Keys.Control | Keys.Shift | Keys.O };
             var addImage = new ToolStripMenuItem("&Add Image...", null, OnAddImage);
+            var newImage = new ToolStripMenuItem("&New Disk Image (800K)", null, OnNewImage);
+            var newHdImage = new ToolStripMenuItem("New &HD Disk Image (1600K)", null, OnNewHdImage);
             var closeAll = new ToolStripMenuItem("&Close All", null, OnCloseAll);
             _importItem.Click += OnImportSample;
             _importItem.ShortcutKeys = Keys.Control | Keys.I;
@@ -320,6 +322,7 @@ namespace AkaiS950Studio
             file.DropDownItems.AddRange(new ToolStripItem[]
             {
                 openImage, openFolder, addImage, closeAll,
+                new ToolStripSeparator(), newImage, newHdImage,
                 new ToolStripSeparator(), _importItem, _exportItem, _exportWavItem,
                 new ToolStripSeparator(),
                 _saveItem, _saveAllItem,
@@ -2275,7 +2278,7 @@ namespace AkaiS950Studio
         {
             MessageBox.Show(this,
                 "Mz950 Studio" + Environment.NewLine + Environment.NewLine +
-                "Reads Akai S900/S950 800K floppy images (.hfe and raw .img)," +
+                "Reads Akai S900/S950 floppy images, 800K and 1600K HD (.hfe and raw .img)," +
                 Environment.NewLine +
                 "decoding the MFM bitstream, directory, allocation table," +
                 Environment.NewLine +
