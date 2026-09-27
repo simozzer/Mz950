@@ -1,8 +1,9 @@
 # Mz950
 
-An independent sampler that plays **Akai S900/S950 floppy disk images**. It loads the images
-and plays the programmes on them through an emulation of that machine's voice: the filter,
-both envelopes and the vibrato, eight notes at a time, from a MIDI keyboard. It comes as a
+An independent emulator for playing back **Akai S900/S950 floppy disk images**. It doesn't
+record anything: it loads the images a sampler saved and plays the programmes on them
+through an emulation of that machine's voice (the filter, both envelopes and the vibrato,
+eight notes at a time) from a MIDI keyboard. It comes as a
 VST3 plugin and a standalone player, plus **Mz950 Studio**, an editor that opens, edits and
 writes the disks back out.
 

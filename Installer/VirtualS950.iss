@@ -129,7 +129,7 @@ Source: "{#PluginArtefacts}\VST3\Mz950.vst3\*"; DestDir: "{autocf}\VST3\Mz950.vs
 ;
 ; They matter more than their size suggests. Without them somebody who has just installed
 ; this owns no S950 floppies and has nothing whatever to open, which makes a working
-; sampler look like a broken one. Ten megabytes of images compress to a few hundred
+; player look like a broken one. Ten megabytes of images compress to a few hundred
 ; kilobytes inside the setup - the disks are mostly zeroes and lzma2 is told to pack them
 ; as one solid block - so this costs the download almost nothing.
 ;
