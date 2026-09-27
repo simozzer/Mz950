@@ -370,7 +370,8 @@ static class ReferenceDump
         // -------------------------------------------------------------- the constants
 
         s.AppendLine("    // the measured constants themselves, so a typo in a digit is caught");
-        s.AppendLine("    inline constexpr double MaxRatio             = " + F(Cal.MaxRatio) + ";");
+        s.AppendLine("    inline constexpr double TopHz                = " + F(Cal.TopHz) + ";");
+        s.AppendLine("    inline constexpr double MaxPlaybackHz        = " + F(Cal.MaxPlaybackHz) + ";");
         s.AppendLine("    inline constexpr double FloorHz              = " + F(Cal.FloorHz) + ";");
         s.AppendLine("    inline constexpr double KeyFull              = " + F(Cal.KeyFull) + ";");
         s.AppendLine("    inline constexpr double VelOctaves           = " + F(Cal.VelOctaves) + ";");

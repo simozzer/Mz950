@@ -20,8 +20,45 @@ namespace s950::cal
 {
     // ------------------------------------------------------------------------ filter
 
-    /// Measured: 16311 Hz at 44100, and 16232 on an earlier take.
-    inline constexpr double MaxRatio = 0.37;
+    /*
+     * Measured: the top of the filter's travel. 16311 Hz, and 16232 on an earlier take.
+     *
+     * A FIXED FREQUENCY, NOT A FRACTION OF THE PLAYBACK RATE. This used to be 0.37 of the rate
+     * the sample leaves at, on the idea that the filter doubles as the reconstruction filter
+     * and so its top should follow the rate - which was assumed, since the 16311 was only ever
+     * read at 44100. It cost every note played below its root its treble.
+     *
+     * MEASURED 2026-09-27: DSKA0077 ESQ BASS 1, a 30 kHz sample with its cutoff at 99, played
+     * from its root down three octaves in minor thirds. The machine kept everything above
+     * 0.37 of the playback rate that the old model cut - 45 dB at 2 kHz three octaves down,
+     * 70 dB at the worst. With the top fixed here every band with signal in it matched to
+     * 2.5 dB at all thirteen keys, and MOOG BASS2's filter envelope and GRAND1 were unmoved.
+     * The images above the playback's own Nyquist that make a low note gritty are the
+     * machine's too; the interpolation already makes them.
+     */
+    inline constexpr double TopHz = 16311.0;
+
+    /*
+     * The fastest the machine will play a sample. Asked for more, it plays the note an octave
+     * lower, and again, until it is under this - it does not clamp, and it has no limit on
+     * the transposition as such.
+     *
+     * MEASURED 2026-09-27, DSKA0077 ESQ BASS 1 (a 30 kHz sample, root 60) played up to note
+     * 127: every note from 90 up sounded one or more octaves down, each by exactly the number
+     * of octaves that brought it under the limit, to within a few cents. Not a key limit:
+     * DSKA0064 VLA W STR (25 kHz) played note 90 at its true pitch, 141 kHz. The bracket is
+     * 151 kHz (note 100, played at 151 and not folded again) to 161 kHz (note 101, folded
+     * twice). 156.25 kHz - 10 MHz / 64 - sits inside it; that exact figure is the guess.
+     */
+    inline constexpr double MaxPlaybackHz = 156250.0;
+
+    /// The playback ratio the machine actually uses: halved until the rate is under the limit.
+    inline double foldedRatio (double sourceRate, double ratio)
+    {
+        while (ratio > 0 && sourceRate * ratio > MaxPlaybackHz)
+            ratio *= 0.5;
+        return ratio;
+    }
 
     /// Measured: the cutoff will not close below this.
     inline constexpr double FloorHz = 311.0;
@@ -781,9 +818,8 @@ namespace s950::cal
      * see KeyPivot. Two later takes, on two disks, measured 2211 and 2210 with tracking off,
      * the second at five different keys with a spread of 0.000 octaves.
      *
-     * A negative frequency means "as far open as it goes" - the reconstruction limit, which
-     * moves with the sample rate, so writing a number would wrongly cap a 48 kHz sample
-     * below what its own ceiling allows.
+     * A negative frequency means "as far open as it goes" - TopHz, or less where the render
+     * rate cannot represent that much.
      */
     struct CurvePoint { double stored, hz; };
 
@@ -801,10 +837,10 @@ namespace s950::cal
     }
 
     /*
-     * A stored 0..99 cutoff in hertz, for audio leaving at `rate`.
+     * A stored 0..99 cutoff in hertz, rendered at `rate`.
      *
-     * The filter is also the reconstruction filter, so the top of its travel moves with the
-     * rate the audio comes out at rather than being a fixed frequency.
+     * The top is TopHz - a fixed frequency, not one that follows the playback rate - held
+     * under 0.45 of the rate the engine renders at, since nothing above that can be drawn.
      *
      * `stored` is a double rather than the panel's integer because the plugin's cutoff trim
      * slides between the panel's steps: 127 MIDI values across a 198-step range lands between
@@ -814,7 +850,7 @@ namespace s950::cal
      */
     inline double cutoffHz (double stored, double rate)
     {
-        const double ceiling = MaxRatio * (rate > 0 ? rate : 48000.0);
+        const double ceiling = std::min (TopHz, 0.45 * (rate > 0 ? rate : 48000.0));
         const double floor   = std::min (FloorHz, ceiling);
         const double v       = clamp (stored, 0.0, 99.0);
 

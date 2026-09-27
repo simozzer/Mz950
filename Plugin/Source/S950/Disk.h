@@ -18,7 +18,8 @@ namespace s950
      *   - velocity to release, warp depth, the VCF amount, and a zone's transpose and
      *     loudness are signed, -50..+50, in two's complement;
      *   - the output port is the panel's 0..10 stored one LOWER, so ALL is 0xFF;
-     *   - a zone's fine tune is 0..255, in 256ths of a semitone upward;
+     *   - a zone's fine is 0..255, the LOW byte of one signed 16-bit pitch offset whose high
+     *     byte is the transpose, counting sixteenths of a semitone (see Zone::pitchOffset);
      *   - the four flags are single bits of byte 18, and change one at a time, so the bits
      *     nobody has decoded yet survive every edit.
      */
@@ -122,7 +123,20 @@ namespace s950
             int         filter = 99;
             int         loudness = 0;    // signed
 
-            double pitchOffset() const { return transpose + fine / 256.0; }
+            /*
+             * The zone's pitch offset in semitones: transpose and fine are ONE signed 16-bit
+             * number, transpose the high byte and fine the low, counting SIXTEENTHS of a
+             * semitone - the unit the sample header's own pitch is kept in.
+             *
+             * NOT transpose + fine/256, which is what this assumed until it was measured.
+             * MEASURED 2026-09-27: DSKA0058 SEQ BASS, whose five keygroups carry (fine,
+             * transpose) of (192,0), (80,0), (0,0), (144,-1) and (64,-1). The machine played
+             * them +12, +5, 0, -7 and -12 semitones - all ten notes within 1.7 cents of that
+             * reading - where the old one put some keygroups five semitones out. Across the
+             * library the reading lands on -12, +24, +12, -5, +7 and sixteenth-step detunes,
+             * which is what a programmer sets; read the old way, most are odd fractions.
+             */
+            double pitchOffset() const { return (transpose * 256 + fine) / 16.0; }
 
             /*
              * "2 SAMPLE" is what the panel leaves in a zone it is not using, and a pointer

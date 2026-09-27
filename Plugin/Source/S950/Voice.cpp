@@ -29,9 +29,9 @@ namespace s950
         if (! group.constantPitch)
             semis += note - sound->rootPitch;
 
-        const double ratio = std::pow (2.0, semis / 12.0);
+        // past the machine's fastest playback the note drops by octaves - cal::MaxPlaybackHz
+        const double ratio = cal::foldedRatio (sound->sourceRate, std::pow (2.0, semis / 12.0));
         step      = sound->sourceRate / sampleRate * ratio;
-        leaveRate = sound->sourceRate * ratio;
         pos       = 0.0;
         dir       = 1;               // forwards until an alternating loop turns it round
 
@@ -65,11 +65,11 @@ namespace s950
         gain  = attack > 0.0005 ? 0.0 : peak;
 
         /*
-         * --- filter. The ceiling is the reconstruction limit, which moves with the rate the
-         * audio leaves at - but we are running at the device rate, so it cannot exceed what
-         * that can represent either.
+         * --- filter. The top of the filter's travel is a fixed frequency, however fast or
+         * slow the sample plays - measured, see cal::TopHz - held under what the device rate
+         * can represent.
          */
-        ceiling    = std::min (cal::MaxRatio * leaveRate, sampleRate * 0.45);
+        ceiling    = std::min (cal::TopHz, sampleRate * 0.45);
         floorHz    = std::min (cal::FloorHz, ceiling);
 
         // cutoffShift is worked out in applyTrims, which has already run, so that the
@@ -110,9 +110,9 @@ namespace s950
         if (! group.constantPitch)
             semis += note - sound->rootPitch;
 
-        const double ratio = std::pow (2.0, semis / 12.0);
+        // past the machine's fastest playback the note drops by octaves - cal::MaxPlaybackHz
+        const double ratio = cal::foldedRatio (sound->sourceRate, std::pow (2.0, semis / 12.0));
         step      = sound->sourceRate / sampleRate * ratio;
-        leaveRate = sound->sourceRate * ratio;
 
         // --- amplitude. The targets move; the gain walks to them from where it is.
         const double depth  = clamp01 (group.velToLoudness / 99.0);
@@ -123,7 +123,7 @@ namespace s950
         applyTrims();
 
         // --- filter
-        ceiling    = std::min (cal::MaxRatio * leaveRate, sampleRate * 0.45);
+        ceiling    = std::min (cal::TopHz, sampleRate * 0.45);
         floorHz    = std::min (cal::FloorHz, ceiling);
 
         // cutoffShift is worked out in applyTrims, which has already run, so that the
@@ -148,10 +148,10 @@ namespace s950
         if (! kg->constantPitch)
             semis += note - sound->rootPitch;
 
-        const double ratio = std::pow (2.0, semis / 12.0);
+        // past the machine's fastest playback the note drops by octaves - cal::MaxPlaybackHz
+        const double ratio = cal::foldedRatio (sound->sourceRate, std::pow (2.0, semis / 12.0));
         step      = sound->sourceRate / sampleRate * ratio;
-        leaveRate = sound->sourceRate * ratio;
-        ceiling   = std::min (cal::MaxRatio * leaveRate, sampleRate * 0.45);
+        ceiling   = std::min (cal::TopHz, sampleRate * 0.45);
         floorHz   = std::min (cal::FloorHz, ceiling);
 
         // --- glide, as start() does it. Key tracking follows by itself: applyTrims reads
@@ -580,7 +580,7 @@ namespace s950
                    : 0.0)
             : vcfEnvelopeHeld (vcfT);
 
-        const double base = cal::cutoffHz (kg->zoneFilter + trims.cutoff, leaveRate);
+        const double base = cal::cutoffHz (kg->zoneFilter + trims.cutoff, sampleRate);
 
         /*
          * A programme with no filter envelope of its own contributes no amount, so an

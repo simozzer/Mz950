@@ -375,12 +375,16 @@ namespace s950::synth
                 put (d, *program, k, P::ConstantPitch, 0);
                 put (d, *program, k, P::OneShot, 0);
 
-                // Fine is 256ths of a semitone UPWARD, so a flat detune is a semitone down
-                // and most of one back up - exact, and it keeps the transpose byte honest.
-                const int cents   = std::max (-50, std::min (50, o.fine));
-                const int fine256 = static_cast<int> (std::llround (std::abs (cents) * 2.56));
-                put (d, *program, k, P::Zone1Transpose, o.octave * 12 - (cents < 0 ? 1 : 0));
-                put (d, *program, k, P::Zone1Fine,      cents < 0 ? 256 - fine256 : fine256);
+                // Transpose and fine are one signed 16-bit count of SIXTEENTHS of a semitone,
+                // transpose the high byte - measured, see Disk::Zone::pitchOffset. So an
+                // octave is 192 and the machine tunes in 6.25-cent steps: a detune of a few
+                // cents is one step, and a flat one borrows from the high byte.
+                const int cents      = std::max (-50, std::min (50, o.fine));
+                const int sixteenths = o.octave * 12 * 16
+                                     + static_cast<int> (std::lround (cents * 16.0 / 100.0));
+                const int high       = sixteenths >= 0 ? sixteenths / 256 : -((255 - sixteenths) / 256);
+                put (d, *program, k, P::Zone1Transpose, high);
+                put (d, *program, k, P::Zone1Fine,      sixteenths - high * 256);
                 put (d, *program, k, P::Zone1Loudness,  -50 + (std::max (0, std::min (99, o.level)) * 50) / 99);
             }
             else

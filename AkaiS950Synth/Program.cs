@@ -478,8 +478,10 @@ namespace AkaiS950Synth
             // programme sounds like whatever was playing before it.
             //
             disk.SetZoneSample(prog, index, 0, layer.Sample);
-            Set(disk, prog, index, 42, layer.Fine < 0 ? 256 + layer.Fine : layer.Fine);
-            Set(disk, prog, index, 43, Signed(layer.Transpose));
+            int fine, transpose;
+            ZonePitch(layer.Transpose, layer.Fine, out fine, out transpose);
+            Set(disk, prog, index, 42, fine);
+            Set(disk, prog, index, 43, transpose);
             Set(disk, prog, index, 44, layer.Filter ?? p.Filter);
             Set(disk, prog, index, 45, Signed(layer.Loudness));
 
@@ -495,9 +497,9 @@ namespace AkaiS950Synth
             if (layer.Hard != null)
             {
                 disk.SetZoneSample(prog, index, 1, layer.Hard.Sample);
-                Set(disk, prog, index, 64, layer.Hard.Fine < 0 ? 256 + layer.Hard.Fine
-                                                               : layer.Hard.Fine);
-                Set(disk, prog, index, 65, Signed(layer.Hard.Transpose));
+                ZonePitch(layer.Hard.Transpose, layer.Hard.Fine, out fine, out transpose);
+                Set(disk, prog, index, 64, fine);
+                Set(disk, prog, index, 65, transpose);
                 Set(disk, prog, index, 66, layer.Hard.Filter ?? layer.Filter ?? p.Filter);
                 Set(disk, prog, index, 67, Signed(layer.Hard.Loudness));
             }
@@ -511,6 +513,24 @@ namespace AkaiS950Synth
         }
 
         /// <summary>A signed byte as the machine stores it.</summary>
+        /// <summary>
+        /// A zone's pitch as the machine reads it: the transpose (high) and fine (low) bytes
+        /// are one signed 16-bit count of SIXTEENTHS of a semitone - measured, see
+        /// AkaiDisk.Zone.PitchOffset. A patch's Fine is in 256ths; the machine cannot go finer
+        /// than a sixteenth (6.25 cents), so a detune is rounded to it but never to nothing -
+        /// a whisker of detune is the point of the layers that ask for one.
+        /// </summary>
+        static void ZonePitch(int semitones, int fine256, out int fineByte, out int transposeByte)
+        {
+            int f = (int)Math.Round(fine256 / 16.0, MidpointRounding.AwayFromZero);
+            if (f == 0 && fine256 != 0) f = fine256 < 0 ? -1 : 1;
+
+            int sixteenths = semitones * 16 + f;
+            int high = sixteenths >= 0 ? sixteenths / 256 : -((255 - sixteenths) / 256);
+            fineByte = sixteenths - high * 256;
+            transposeByte = Signed(high);
+        }
+
         static int Signed(int v)
         {
             if (v < -128) v = -128;

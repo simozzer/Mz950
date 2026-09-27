@@ -32,9 +32,15 @@ namespace
             case KeygroupParam::VelocitySwitch:
                 return v >= 128 ? juce::String ("off") : juce::String (v);
 
+            // Transpose and fine are the high and low bytes of one signed count of sixteenths
+            // of a semitone (Disk::Zone::pitchOffset), so each knob says what it is worth.
             case KeygroupParam::Zone1Fine:
             case KeygroupParam::Zone2Fine:
-                return juce::String (v) + " (+" + juce::String (juce::roundToInt (v * 100.0 / 256.0)) + " ct)";
+                return juce::String (v) + " (+" + juce::String (v / 16.0, 2) + " st)";
+
+            case KeygroupParam::Zone1Transpose:
+            case KeygroupParam::Zone2Transpose:
+                return (v > 0 ? "+" : "") + juce::String (v) + " (" + (v > 0 ? "+" : "") + juce::String (v * 16) + " st)";
 
             default:
                 break;

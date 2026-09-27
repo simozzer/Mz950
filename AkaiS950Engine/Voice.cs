@@ -57,7 +57,6 @@ namespace AkaiS950Engine
         double _sampleRate;          // the rate we are rendering at
         double _pos;                 // where we are in the sample, in frames
         double _step;                // frames per output sample, before the LFO
-        double _leaveRate;           // the rate the audio leaves at, for the filter ceiling
 
         // amplitude envelope, all in gain except the times
         Stage _stage = Stage.Idle;
@@ -156,9 +155,9 @@ namespace AkaiS950Engine
             double semis = kg.ZoneTranspose;
             if (!kg.ConstantPitch) semis += note - _sound.RootPitch;
 
-            double ratio = Math.Pow(2.0, semis / 12.0);
+            // past the machine's fastest playback the note drops by octaves - Cal.MaxPlaybackHz
+            double ratio = Cal.FoldedRatio(_sound.SourceRate, Math.Pow(2.0, semis / 12.0));
             _step = _sound.SourceRate / sampleRate * ratio;
-            _leaveRate = _sound.SourceRate * ratio;
             _pos = 0;
             _dir = 1;               // forwards until an alternating loop turns it round
 
@@ -187,12 +186,12 @@ namespace AkaiS950Engine
             _t = 0;
             _gain = _attack > 0.0005 ? 0 : _peak;
 
-            // --- filter. The ceiling is the reconstruction limit, which moves with the
-            // rate the audio leaves at - but we are running at the device rate, so it
-            // cannot exceed what that can represent either.
-            _ceiling = Math.Min(Cal.MaxRatio * _leaveRate, sampleRate * 0.45);
+            // --- filter. The top of its travel is a fixed frequency however fast or slow
+            // the sample plays - measured, see Cal.TopHz - held under what the device rate
+            // can represent.
+            _ceiling = Math.Min(Cal.TopHz, sampleRate * 0.45);
             _floor = Math.Min(Cal.FloorHz, _ceiling);
-            _baseCutoff = Cal.CutoffHz(kg.ZoneFilter, _leaveRate);
+            _baseCutoff = Cal.CutoffHz(kg.ZoneFilter, sampleRate);
 
             double track = Clamp(kg.KeyToFilter, 0, 99) / Cal.KeyFull;
             double keyShift = (note - Cal.KeyPivot) / 12.0 * track;
@@ -257,9 +256,9 @@ namespace AkaiS950Engine
             double semis = kg.ZoneTranspose;
             if (!kg.ConstantPitch) semis += _note - _sound.RootPitch;
 
-            double ratio = Math.Pow(2.0, semis / 12.0);
+            // past the machine's fastest playback the note drops by octaves - Cal.MaxPlaybackHz
+            double ratio = Cal.FoldedRatio(_sound.SourceRate, Math.Pow(2.0, semis / 12.0));
             _step = _sound.SourceRate / _sampleRate * ratio;
-            _leaveRate = _sound.SourceRate * ratio;
 
             // --- amplitude. The targets move; the gain walks to them from where it is.
             double depth = Clamp01(kg.VelToLoudness / 99.0);
@@ -277,9 +276,9 @@ namespace AkaiS950Engine
             _sustain = _peak * Cal.DbToGain(sustainDb);
 
             // --- filter
-            _ceiling = Math.Min(Cal.MaxRatio * _leaveRate, _sampleRate * 0.45);
+            _ceiling = Math.Min(Cal.TopHz, _sampleRate * 0.45);
             _floor = Math.Min(Cal.FloorHz, _ceiling);
-            _baseCutoff = Cal.CutoffHz(kg.ZoneFilter, _leaveRate);
+            _baseCutoff = Cal.CutoffHz(kg.ZoneFilter, _sampleRate);
 
             double track = Clamp(kg.KeyToFilter, 0, 99) / Cal.KeyFull;
             double keyShift = (_note - Cal.KeyPivot) / 12.0 * track;

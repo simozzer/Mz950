@@ -1126,8 +1126,19 @@ namespace s950
          *
          * Cropping here keeps the voice unaware of it. A marker at or past the end of what
          * would play is ignored, as the Studio's audition ignores it.
+         *
+         * And a sample that does not loop STOPS at its end marker (0x1C), not at the end of
+         * its audio. MEASURED, 2026-09-27: DSKA0004 DRUM-A's COWBELL, whose end marker sits
+         * 4000 words (100 ms) short of its audio - the machine's note fell away to nothing
+         * around the marker while the engine's played on to the last word. A looping sample
+         * already turns round at the same marker, so only one-shots change.
          */
-        const long long playsTo = s->loops ? to : static_cast<long long> (words.size());
+        const long long size    = static_cast<long long> (words.size());
+        const long long playsTo = s->loops ? to
+                                : (sample.loopEnd > 0 && sample.loopEnd < size ? sample.loopEnd : size);
+        if (! s->loops && playsTo < size)
+            s->audio.resize (static_cast<std::size_t> (playsTo));
+
         const long long first   = sample.loopStart > 0 && sample.loopStart < playsTo ? sample.loopStart : 0;
         if (first > 0)
         {

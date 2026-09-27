@@ -58,7 +58,9 @@ static class PurityCheck
         Console.WriteLine("  -- a sawtooth, whose upper partials can fold --");
         Probe("at its own pitch", false, 60, 99, 0, 0, 0, 0);
         Probe("up a fifth", false, 67, 99, 0, 0, 0, 0);
-        Probe("up two octaves", false, 84, 99, 0, 0, 0, 0);
+        // As far up as a 48 kHz sample goes before the machine drops it an octave: two
+        // octaves would ask for 192 kHz, past Cal.MaxPlaybackHz, and fold to one.
+        Probe("up an octave and a fifth", false, 79, 99, 0, 0, 0, 0);
 
         Console.WriteLine();
         Console.WriteLine(_fails == 0 ? "all good" : _fails + " FAILED");

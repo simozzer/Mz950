@@ -382,10 +382,10 @@ namespace AkaiS950Studio
         [Description("Sample this zone plays. The list is the samples on this disk; you may also type a name that lives on another disk.")]
         public string Sample1 { get { return Str(24, 10); } set { SetZoneSample(24, 40, value); } }
 
-        [Category("Zone 1"), Description("Whole semitones, signed.")]
+        [Category("Zone 1"), Description("High byte of the zone's pitch, signed: worth 16 semitones a step. With Fine it is one count of sixteenths of a semitone - -1 with Fine 64 is -12.")]
         public int Transpose1 { get { return SB(43); } set { Set(43, Clamp(value, -50, 50)); } }
 
-        [Category("Zone 1"), Description("Unsigned 0..255, a fraction of a semitone upward.")]
+        [Category("Zone 1"), Description("Low byte of the zone's pitch, 0..255, in sixteenths of a semitone: 16 is a semitone up, 192 an octave.")]
         public int Fine1 { get { return B(42); } set { Set(42, Clamp(value, 0, 255)); } }
 
         [Category("Zone 1")] public int Filter1 { get { return B(44); } set { Set(44, Clamp(value, 0, 99)); } }
@@ -397,10 +397,10 @@ namespace AkaiS950Studio
         [Description("Second sample, selected above the velocity switch. Set it to 2 SAMPLE to leave the zone unused.")]
         public string Sample2 { get { return Str(46, 10); } set { SetZoneSample(46, 62, value); } }
 
-        [Category("Zone 2"), Description("Whole semitones, signed.")]
+        [Category("Zone 2"), Description("High byte of the zone's pitch, signed: worth 16 semitones a step. With Fine it is one count of sixteenths of a semitone - -1 with Fine 64 is -12.")]
         public int Transpose2 { get { return SB(65); } set { Set(65, Clamp(value, -50, 50)); } }
 
-        [Category("Zone 2"), Description("Unsigned 0..255, a fraction of a semitone upward.")]
+        [Category("Zone 2"), Description("Low byte of the zone's pitch, 0..255, in sixteenths of a semitone: 16 is a semitone up, 192 an octave.")]
         public int Fine2 { get { return B(64); } set { Set(64, Clamp(value, 0, 255)); } }
 
         [Category("Zone 2")] public int Filter2 { get { return B(66); } set { Set(66, Clamp(value, 0, 99)); } }

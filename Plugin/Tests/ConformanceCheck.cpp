@@ -71,7 +71,8 @@ namespace
     {
         std::printf ("\n  the measured constants\n");
 
-        same ("MaxRatio",             s950::cal::MaxRatio,             reference::MaxRatio);
+        same ("TopHz",                s950::cal::TopHz,                reference::TopHz);
+        same ("MaxPlaybackHz",        s950::cal::MaxPlaybackHz,        reference::MaxPlaybackHz);
         same ("FloorHz",              s950::cal::FloorHz,              reference::FloorHz);
         same ("KeyFull",              s950::cal::KeyFull,              reference::KeyFull);
         same ("VelOctaves",           s950::cal::VelOctaves,           reference::VelOctaves);
@@ -104,6 +105,27 @@ namespace
         }
 
         std::printf ("    worst relative difference %.3g\n", worst);
+
+        /*
+         * Past the fastest the machine will play a sample, a note drops by octaves until it
+         * is under - measured on ESQ BASS 1 (30 kHz) up to note 127, and not a key limit:
+         * VLA W VLN (25 kHz) played note 90 as it is. See cal::MaxPlaybackHz.
+         */
+        std::printf ("\n  the fastest playback, and the octaves past it\n");
+        struct { double rate; int semitones, octavesDown; const char* what; } folds[] =
+        {
+            { 30000, 24, 0, "note 84 of a 30 kHz sample plays as it is" },
+            { 30000, 30, 1, "note 90 of it drops an octave" },
+            { 30000, 40, 1, "note 100 drops once, to 151 kHz" },
+            { 30000, 41, 2, "note 101 drops twice" },
+            { 30000, 67, 4, "note 127 drops four times" },
+            { 25000, 30, 0, "a 25 kHz sample's note 90 plays as it is" },
+        };
+        for (const auto& f : folds)
+        {
+            const double asked = std::pow (2.0, f.semitones / 12.0);
+            same (f.what, s950::cal::foldedRatio (f.rate, asked), asked / std::pow (2.0, f.octavesDown), 1e-12);
+        }
     }
 
     void checkEnvelopes()
@@ -748,7 +770,7 @@ namespace
             same ("nor the hard one", atVelocity (100, 0.0), hardFlat, 1e-12);
         }
 
-        // The stops still hold: a trim cannot open the filter past the reconstruction limit.
+        // The stops still hold: a trim cannot open the filter past the top of its travel.
         const double wideOpen = levelAt (patchWith (99, 0, true), 0.0, 0.0);
         const double shoved   = levelAt (patchWith (99, 0, true), 99.0, 0.0);
         same ("the trim cannot open past the stop", shoved, wideOpen, 1e-12);

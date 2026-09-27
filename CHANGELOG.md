@@ -8,6 +8,45 @@ assumption it says that too — those are the ones another afternoon with a reco
 
 ## Unreleased
 
+### Three readings corrected against the machine
+
+A calibration round on the real S950 - five programmes chosen from the library for what they
+exercise, each recorded on the hardware and set against the engine rendered offline from the
+same disk - found the loops, the filter envelope, the velocity switches and the drums right,
+and four things wrong. All four are fixed in both engines.
+
+- **A zone's transpose and fine are one number, in sixteenths of a semitone.** Keygroup
+  bytes 42/43 (and 64/65) are the low and high bytes of one signed 16-bit pitch offset, in
+  the unit the sample header's own pitch uses - not transpose plus fine/256. DSKA0058 SEQ
+  BASS carries (fine, transpose) of (192,0), (80,0), (0,0), (144,-1) and (64,-1); the machine
+  plays them +12, +5, 0, -7 and -12 semitones, and so does the engine now, all ten notes
+  within 1.7 cents. Before, some of its keygroups played five semitones out. 544 zones in the
+  library use these bytes; read this way they land on -12, +24, +12, +7, -5 and 1/16-step
+  detunes. The Program tab says what each byte is worth.
+- **The top of the filter is a fixed 16.3 kHz, not a fraction of the playback rate.** It
+  used to fall with the rate a sample plays at, which took the treble off every note played
+  below its root - the grit the machine is known for. DSKA0077 ESQ BASS 1, three octaves
+  down: up to 70 dB was missing; now every band with signal is within 2.5 dB at all thirteen
+  keys tried. MOOG BASS2's filter envelope and GRAND1 are unchanged by it.
+- **A one-shot stops at its end marker.** DSKA0004 DRUM-A's cowbell ends 100 ms before its
+  audio does, and the machine stops there; the engine played on. 123 one-shots in the
+  library are affected. (The machine fades over the last ~80 ms where this stops cleanly,
+  about 33 dB below the hit.)
+
+- **Past about 156 kHz a note drops by octaves.** The machine will not play a sample faster
+  than somewhere between 151 and 161 kHz; asked to, it plays the note an octave lower - and
+  again, until it is under. It is a rate limit, not a key limit: ESQ BASS 1 (30 kHz) folds
+  from note 90, VLA W VLN (25 kHz) plays note 90 as it is. Every note of ESQ BASS 1 from 90 to
+  127 now matches the machine within 9 cents, where they were one to four octaves out.
+  156.25 kHz (10 MHz / 64) is the figure used - inside the measured bracket, but a guess
+  within it. Notes below a keygroup's lowest key stay silent, as they do on the machine.
+
+**The Synth tab and the sound library.** Both synth writers wrote detune and octave the old
+way, so the bundled disks played octaves as +192 semitones on the hardware. The writers now
+write sixteenths - the machine's finest step, 6.25 cents, so a detune of a few cents is one
+step - and the five library disks are regenerated, their audio unchanged. Synth disks saved
+before this will play out of tune and should be rendered again.
+
 ### The release starts 15 ms after the note-off, as on the machine
 
 Measured on DSKA0039 GRAND1 from a clean A/B: a 368-note house-piano clip at 120 bpm played

@@ -56,7 +56,8 @@ namespace AkaiS950Synth
     {
         public string Sample;          // which generated wave
         public int Transpose;          // semitones, signed
-        public int Fine;               // 1/256ths of a semitone - detuning, for width
+        public int Fine;               // 1/256ths of a semitone - detuning, for width; lands on
+                                       // the machine's 1/16 step (Program.ZonePitch)
         public int Loudness;           // signed trim, in the machine's decibel count
 
         /// <summary>
@@ -630,9 +631,10 @@ namespace AkaiS950Synth
                 },
 
                 //
-                // Two saws a whisker apart. The detune is the whole sound: six 256ths of a
-                // semitone is about four cents, which beats slowly enough to sound wide
-                // rather than out of tune.
+                // Two saws a whisker apart. The detune is the whole sound. Six 256ths asks for
+                // about two cents; the machine's finest step is a sixteenth of a semitone
+                // (6.25 cents), so that is what lands on the disk - still slow enough to beat
+                // wide rather than sound out of tune.
                 //
                 new Patch
                 {

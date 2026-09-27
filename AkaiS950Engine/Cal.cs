@@ -17,8 +17,31 @@ namespace AkaiS950Engine
     {
         // ---------------------------------------------------------------- the filter
 
-        /// <summary>Measured: 16311 Hz at 44100, and 16232 on an earlier take.</summary>
-        public const double MaxRatio = 0.37;
+        /// <summary>
+        /// Measured: the top of the filter's travel. 16311 Hz, and 16232 on an earlier take.
+        ///
+        /// A FIXED FREQUENCY, NOT A FRACTION OF THE PLAYBACK RATE. It used to be 0.37 of the
+        /// rate the sample leaves at - assumed, since 16311 was only read at 44100 - which
+        /// cost every note played below its root its treble. Measured 2026-09-27 on DSKA0077
+        /// ESQ BASS 1 three octaves down: fixed here, every band with signal matched to 2.5 dB;
+        /// following the rate, up to 70 dB went missing. See cal::TopHz in the plugin.
+        /// </summary>
+        public const double TopHz = 16311.0;
+
+        /// <summary>
+        /// The fastest the machine will play a sample. Asked for more, it plays the note an
+        /// octave lower, and again, until it is under this. Measured 2026-09-27 on DSKA0077
+        /// ESQ BASS 1 (30 kHz) up to note 127, bracketed between 151 and 161 kHz; 156.25 kHz
+        /// (10 MHz / 64) is the guess inside it. See cal::MaxPlaybackHz in the plugin.
+        /// </summary>
+        public const double MaxPlaybackHz = 156250.0;
+
+        /// <summary>The playback ratio the machine actually uses: halved until under the limit.</summary>
+        public static double FoldedRatio(double sourceRate, double ratio)
+        {
+            while (ratio > 0 && sourceRate * ratio > MaxPlaybackHz) ratio *= 0.5;
+            return ratio;
+        }
 
         /// <summary>Measured: the cutoff will not close below this.</summary>
         public const double FloorHz = 311.0;
@@ -38,9 +61,8 @@ namespace AkaiS950Engine
         /// 2210 with tracking off, the second of them at five different keys with a spread of
         /// 0.000 octaves.
         ///
-        /// A negative frequency means "as far open as it goes" - the reconstruction limit,
-        /// which moves with the sample rate, so writing a number would wrongly cap a 48 kHz
-        /// sample below what its own ceiling allows.
+        /// A negative frequency means "as far open as it goes" - TopHz, or less where the
+        /// render rate cannot represent that much.
         /// </summary>
         static readonly double[,] Curve =
         {
@@ -976,14 +998,14 @@ namespace AkaiS950Engine
         }
 
         /// <summary>
-        /// A stored 0..99 cutoff in hertz, for audio leaving at <paramref name="rate"/>.
+        /// A stored 0..99 cutoff in hertz, rendered at <paramref name="rate"/>.
         ///
-        /// The filter is also the reconstruction filter, so the top of its travel moves with
-        /// the rate the audio comes out at rather than being a fixed frequency.
+        /// The top is TopHz, a fixed frequency, held under 0.45 of the rate the engine
+        /// renders at, since nothing above that can be drawn.
         /// </summary>
         public static double CutoffHz(int stored, double rate)
         {
-            double ceiling = MaxRatio * (rate > 0 ? rate : 48000.0);
+            double ceiling = Math.Min(TopHz, 0.45 * (rate > 0 ? rate : 48000.0));
             double floor = Math.Min(FloorHz, ceiling);
             double v = Clamp(stored, 0, 99);
 

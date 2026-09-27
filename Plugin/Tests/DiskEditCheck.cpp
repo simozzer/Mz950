@@ -218,6 +218,28 @@ int main (int argc, char** argv)
                  programs, keygroups, static_cast<int> (KeygroupParam::Count));
 
     /*
+     * A zone's pitch: transpose and fine as one signed 16-bit count of sixteenths of a
+     * semitone. The first five are DSKA0058 SEQ BASS's zones, measured on the machine at
+     * +12, +5, 0, -7 and -12; the last two are the library's +24 and its commonest detune.
+     */
+    {
+        struct { int fine, transpose; double semitones; } cases[] =
+        {
+            { 192, 0, 12 }, { 80, 0, 5 }, { 0, 0, 0 }, { 144, -1, -7 }, { 64, -1, -12 },
+            { 128, 1, 24 }, { 255, -1, -1.0 / 16 }
+        };
+        for (const auto& c : cases)
+        {
+            Disk::Zone z;
+            z.fine = c.fine; z.transpose = c.transpose;
+            ++checks;
+            if (z.pitchOffset() != c.semitones)
+                fail ("zone pitch", ("fine " + std::to_string (c.fine) + " transpose " + std::to_string (c.transpose)).c_str(),
+                      static_cast<int> (z.pitchOffset() * 16), static_cast<int> (c.semitones * 16));
+        }
+    }
+
+    /*
      * A rebuild after an edit hears the edit, and keeps the samples it had.
      *
      * The second half is what lets a held note follow an edit: Voice::adopt only takes new
@@ -264,7 +286,7 @@ int main (int argc, char** argv)
      * moved to match; a marker at or past the end of what would play is ignored.
      */
     {
-        int marked = 0;
+        int marked = 0, cut = 0;
         std::set<std::string> seen;
         for (const auto& p : entries)
         {
@@ -279,17 +301,21 @@ int main (int argc, char** argv)
                 if (s == nullptr) continue;
 
                 const auto words = original.sampleWords12 (*s);
-                const long long end   = std::min<long long> (s->loopEnd, static_cast<long long> (words.size()));
-                const long long plays = k.sound->loops ? end : static_cast<long long> (words.size());
+                const long long size  = static_cast<long long> (words.size());
+                const long long end   = std::min<long long> (s->loopEnd, size);
+                // a one-shot stops at its end marker; a loop turns round there
+                const long long stop  = k.sound->loops ? size : (s->loopEnd > 0 && s->loopEnd < size ? s->loopEnd : size);
+                const long long plays = k.sound->loops ? end : stop;
                 const long long first = s->loopStart > 0 && s->loopStart < plays ? s->loopStart : 0;
                 if (first > 0) ++marked;
+                if (stop < size) ++cut;
 
                 const std::string where = "sample " + s->name;
                 ++checks;
-                if (static_cast<long long> (k.sound->audio.size()) != static_cast<long long> (words.size()) - first)
+                if (static_cast<long long> (k.sound->audio.size()) != stop - first)
                 {
-                    fail (where, "plays from the start marker (length)", static_cast<int> (k.sound->audio.size()),
-                          static_cast<int> (static_cast<long long> (words.size()) - first));
+                    fail (where, "plays from the start marker to the end marker (length)",
+                          static_cast<int> (k.sound->audio.size()), static_cast<int> (stop - first));
                     continue;
                 }
                 ++checks;
@@ -304,8 +330,8 @@ int main (int argc, char** argv)
                 }
             }
         }
-        std::printf ("  %d sounds played, %d of them from a start marker past word 0\n",
-                     static_cast<int> (seen.size()), marked);
+        std::printf ("  %d sounds played, %d of them from a start marker past word 0, %d one-shots cut at an end marker\n",
+                     static_cast<int> (seen.size()), marked, cut);
     }
 
     // ------------------------------------------------------------- making a disk
@@ -500,9 +526,12 @@ int main (int argc, char** argv)
         ++checks; if (groups[0].lowKey != Recipe::SynthLowKeyWithDrums || groups[0].highKey != 127) fail ("synth", "OSC1 spans the synth range", groups[0].lowKey, Recipe::SynthLowKeyWithDrums);
         ++checks; if (groups[0].constantPitch() || groups[0].oneShot()) fail ("synth", "an oscillator tracks the key", 1, 0);
 
-        // a flat detune of four cents is a semitone down and 246 256ths back up
-        ++checks; if (groups[0].zone1.transpose != -1 || groups[0].zone1.fine != 246) fail ("synth", "OSC1 -4 cents", groups[0].zone1.fine, 246);
-        ++checks; if (groups[1].zone1.transpose != 0  || groups[1].zone1.fine != 10)  fail ("synth", "OSC2 +4 cents", groups[1].zone1.fine, 10);
+        // A detune of four cents is one sixteenth of a semitone, the machine's step: flat is
+        // the high byte -1 and the low 255, sharp is 0 and 1.
+        ++checks; if (groups[0].zone1.transpose != -1 || groups[0].zone1.fine != 255) fail ("synth", "OSC1 -4 cents", groups[0].zone1.fine, 255);
+        ++checks; if (groups[1].zone1.transpose != 0  || groups[1].zone1.fine != 1)   fail ("synth", "OSC2 +4 cents", groups[1].zone1.fine, 1);
+        ++checks; if (groups[0].zone1.pitchOffset() != -1.0 / 16) fail ("synth", "OSC1 plays a sixteenth flat", (int) (groups[0].zone1.pitchOffset() * 16), -1);
+        ++checks; if (groups[1].zone1.pitchOffset() !=  1.0 / 16) fail ("synth", "OSC2 plays a sixteenth sharp", (int) (groups[1].zone1.pitchOffset() * 16), 1);
 
         // the drums: one key each on GM's notes, constant pitch, one-shot, and the ride left out
         bool sawRide = false;

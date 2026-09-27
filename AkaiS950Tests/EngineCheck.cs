@@ -47,10 +47,22 @@ static class EngineCheck
         CheckCutoff(40, 44100, 1138.000);
         CheckCutoff(50, 44100, 2210.000);
         CheckCutoff(60, 44100, 4779.000);
-        CheckCutoff(99, 44100, 16317.000);
-        // the ceiling moves with the rate, because the filter is also the reconstruction one
+        CheckCutoff(99, 44100, 16311.000);
+        // The top is a fixed frequency, not a fraction of the playback rate - measured, see
+        // Cal.TopHz. The only rate that caps it is the one being rendered at: at 20000 nothing
+        // above 0.45 of it can be drawn.
         CheckCutoff(50, 20000, 2210.000);
-        CheckCutoff(99, 20000, 7400.000);
+        CheckCutoff(99, 20000, 9000.000);
+        CheckCutoff(99, 96000, 16311.000);
+
+        // Past the machine's fastest playback a note drops by octaves (Cal.MaxPlaybackHz).
+        // The cases are the ones measured: ESQ BASS 1, 30 kHz, root 60, and VLA W VLN, 25 kHz.
+        CheckFold(30000, 24, 0);    // note 84: 120 kHz, played as it is
+        CheckFold(30000, 30, 1);    // note 90: 170 kHz, an octave down
+        CheckFold(30000, 40, 1);    // note 100: 302 kHz, down once to 151
+        CheckFold(30000, 41, 2);    // note 101: 322 kHz, down twice
+        CheckFold(30000, 67, 4);    // note 127
+        CheckFold(25000, 30, 0);    // VLA note 90: 141 kHz - a rate limit, not a key limit
 
         // The measured points of Cal.EnvTime. 20 and 50 USED to be interpolation across the
         // long unmeasured gap at the bottom, and this test pinned those interpolated values
@@ -168,6 +180,15 @@ static class EngineCheck
         Console.WriteLine();
         Console.WriteLine(_fails == 0 ? "all good" : _fails + " FAILED");
         return _fails == 0 ? 0 : 1;
+    }
+
+    static void CheckFold(double sourceRate, int semitones, int octavesDown)
+    {
+        double asked = Math.Pow(2.0, semitones / 12.0);
+        double got = Cal.FoldedRatio(sourceRate, asked);
+        double want = asked / Math.Pow(2.0, octavesDown);
+        Check(F(sourceRate, 0) + " Hz up " + semitones + " semitones plays " + octavesDown + " octave(s) down",
+              Near(got, want, 1e-9), F(got, 4));
     }
 
     static void CheckCutoff(int stored, double rate, double want)

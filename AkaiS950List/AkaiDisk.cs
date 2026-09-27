@@ -334,17 +334,24 @@ namespace AkaiS950List
         {
             public string Name;          // +0..9
             public int Pointer;          // +16..17, internal reference
-            // +18. UNSIGNED 0..255, a fraction of a semitone upward: the panel shows
-            // 128 for the byte 128, not -128. Pitch offset is Transpose + Fine/256
-            // semitones, so a small downward detune is written as transpose -1 with a
-            // large fine - which is why 206 of the 211 keygroups at transpose -1 carry
-            // a non-zero fine (mean 163) while 1396 of the 1574 at transpose 0 carry none.
+            // +18 and +19 are ONE signed 16-bit number: fine the low byte (the panel shows
+            // 128 for the byte 128, not -128), transpose the high byte. It counts SIXTEENTHS
+            // of a semitone - the unit the sample header's pitch is kept in - so a downward
+            // offset is transpose -1 with a large fine, which is why 206 of the 211 keygroups
+            // at transpose -1 carry a non-zero fine while 1396 of the 1574 at transpose 0
+            // carry none. It is not Transpose + Fine/256, which was assumed until measured.
             public int Fine;             // +18, unsigned - confirmed on the panel
             public int Transpose;        // +19, signed
             public int Filter;           // +20, 0..99
 
-            /// <summary>Total pitch offset in semitones: whole steps plus the fine fraction.</summary>
-            public double PitchOffset { get { return Transpose + Fine / 256.0; } }
+            /// <summary>
+            /// Total pitch offset in semitones: (Transpose*256 + Fine) / 16.
+            ///
+            /// MEASURED 2026-09-27 on DSKA0058 SEQ BASS: (fine, transpose) of (192,0), (80,0),
+            /// (0,0), (144,-1) and (64,-1) played +12, +5, 0, -7 and -12 semitones, all ten
+            /// notes within 1.7 cents. See Zone::pitchOffset in the plugin.
+            /// </summary>
+            public double PitchOffset { get { return (Transpose * 256 + Fine) / 16.0; } }
             public int Loudness;         // +21, signed
 
             // +10..+15 belong to the keygroup, not the zone. Zone 1 carries the

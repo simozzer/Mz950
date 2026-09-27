@@ -401,11 +401,16 @@ namespace AkaiS950Studio
             // A note starts at the start marker (0x20), not at word 0 - measured on the
             // machine with DSKA0039 GRAND1, whose samples skip 1000 words of quiet lead-in.
             // See Disk::soundFor in the plugin. A marker at or past the end is ignored.
-            long playsTo = loops ? to : words.Length;
+            // And a sample that does not loop stops at its END marker (0x1C), not at the end
+            // of its audio - measured on DRUM-A's COWBELL (DSKA0004), whose marker is 100 ms
+            // short. A loop already turns round there, so only one-shots are cut.
+            int size = words.Length;
+            if (!loops && e.LoopEnd > 0 && e.LoopEnd < words.Length) size = (int)e.LoopEnd;
+            long playsTo = loops ? to : size;
             int first = e.LoopStart > 0 && e.LoopStart < playsTo ? (int)e.LoopStart : 0;
             from = Math.Max(from, first);
 
-            var audio = new float[words.Length - first];
+            var audio = new float[size - first];
             for (int i = 0; i < audio.Length; i++) audio[i] = words[first + i] / 2048f;
 
             var sound = new Sound

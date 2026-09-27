@@ -303,7 +303,6 @@ namespace s950
         /// waiting to be written.
         double wheelBend  = 1.0;
         double step       = 1.0;     // frames per output sample, before the LFO
-        double leaveRate  = 40000.0; // the rate the audio leaves at, for the filter ceiling
 
         // amplitude envelope, all in gain except the times
         Stage  stage = Stage::idle;
