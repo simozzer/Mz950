@@ -6,9 +6,13 @@ Every number here came off a recording of a real S950 rather than out of a manua
 a change is a measurement it says what was measured and what it replaced. Where it is an
 assumption it says that too — those are the ones another afternoon with a recorder settles.
 
-## Unreleased
+## v0.5.0 — 2026-09-27
 
-### Three readings corrected against the machine
+The release where VirtualS950 became Mz950, grew a Synth tab and a Program tab, and was held
+against a real S950 on ten test programmes - which found four places the engine read a disk
+differently from the machine.
+
+### Four readings corrected against the machine
 
 A calibration round on the real S950 - five programmes chosen from the library for what they
 exercise, each recorded on the hardware and set against the engine rendered offline from the
