@@ -38,8 +38,8 @@ namespace s950
 
         /*
          * The loop, in frames. The machine plays end-length .. end round and round, so the
-         * start follows from the length rather than from the stored start - which is simply
-         * zero in 250 of the library's 324 looped samples.
+         * loop start follows from the length. The start marker (0x20) is where a note
+         * begins, not the loop: audio already starts there (Disk::soundFor crops it).
          */
         int  loopFrom = 0, loopTo = 0;
 

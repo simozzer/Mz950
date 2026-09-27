@@ -119,10 +119,10 @@ namespace AkaiS950List
         }
 
         /// <summary>
-        /// Where a sample loops. The machine plays end-length .. end, and the loop start
-        /// field is left at 0 in three quarters of the library, so that is what this
-        /// writes: the end, the length, and a start of 0. Anything reading a loop honours
-        /// max(start, end - length), so a 0 start leaves the length to decide.
+        /// Where a sample loops. The machine plays end-length .. end, so this writes the
+        /// end and the length. It leaves 0x20 alone: that is the START MARKER, where a note
+        /// begins, measured on the machine (DSKA0039 GRAND1), and a loop edit must not move
+        /// it - unless it would now fall at or past the end, where it goes back to 0.
         /// </summary>
         public void SetLoop(AkaiEntry e, long end, long length, char mode)
         {
@@ -135,7 +135,7 @@ namespace AkaiS950List
                 throw new ArgumentException("a loop end and length are whole words, in pairs");
 
             PutU32File(e, 0x1C, end);
-            PutU32File(e, 0x20, 0);
+            if (e.LoopStart >= end) PutU32File(e, 0x20, 0);
             PutU32File(e, 0x24, length);
             Modified = true;
             ParseDirectory();

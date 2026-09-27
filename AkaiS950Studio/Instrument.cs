@@ -392,15 +392,21 @@ namespace AkaiS950Studio
             short[] words = disk.SampleWords12(e);
             if (words.Length == 0) return null;
 
-            var audio = new float[words.Length];
-            for (int i = 0; i < words.Length; i++) audio[i] = words[i] / 2048f;
-
-            // The machine plays end-length .. end, so the start follows from the length
-            // rather than from the stored start - which is simply zero in 250 of the
-            // library's 324 looped samples.
+            // The machine plays end-length .. end, so the loop start follows from the length.
             bool loops = e.LoopMode != 'O' && e.LoopLength > 0 && e.LoopEnd > 0;
             int to = (int)Math.Min(e.LoopEnd, words.Length);
             int from = (int)Math.Max(0, e.LoopEnd - e.LoopLength);
+            loops = loops && to > from;
+
+            // A note starts at the start marker (0x20), not at word 0 - measured on the
+            // machine with DSKA0039 GRAND1, whose samples skip 1000 words of quiet lead-in.
+            // See Disk::soundFor in the plugin. A marker at or past the end is ignored.
+            long playsTo = loops ? to : words.Length;
+            int first = e.LoopStart > 0 && e.LoopStart < playsTo ? (int)e.LoopStart : 0;
+            from = Math.Max(from, first);
+
+            var audio = new float[words.Length - first];
+            for (int i = 0; i < audio.Length; i++) audio[i] = words[first + i] / 2048f;
 
             var sound = new Sound
             {
@@ -408,10 +414,10 @@ namespace AkaiS950Studio
                 Audio = audio,
                 SourceRate = e.SampleRate < 1000 ? 40000 : e.SampleRate,
                 RootPitch = e.NominalPitch + e.FinePitch / 16.0,
-                Loops = loops && to > from,
+                Loops = loops,
                 Alternates = e.LoopMode == 'A',
-                LoopFrom = from,
-                LoopTo = to
+                LoopFrom = from - first,
+                LoopTo = to - first
             };
 
             // Join the loop cleanly. The machine splices and clicks if the points are

@@ -27,8 +27,30 @@ from the same MIDI through a real S950 and through the plugin, recorded with hea
   the Studio's. New conformance checks: the key is up at once, the level holds through the
   latency and then falls, all-notes-off is immediate.
 
-One programme and one clip. A dedicated run - single notes, known gate lengths, the release
-start timed against the MIDI - should confirm the figure before it is called settled.
+One programme and one clip. The single-note run below re-measured it with the start marker
+honoured: timed from each note's own attack, so any MIDI or recording delay cancels, the
+engine's release reaches -20 dB within 7 ms of the machine's at 50, 150 and 500 ms gates.
+
+### A note starts at the sample's start marker
+
+Every sample header carries a start marker at 0x20. The Studio showed it and auditioned from
+it, but neither engine played from it: every note started at word 0. Measured on DSKA0039
+GRAND1 with `SingleNoteTest.mid` - note 60 struck twelve times at four gate lengths, recorded
+from the machine and the plugin:
+
+- Every GRAND sample has its marker at **1000 words** (33–40 ms), after 500–750 words of
+  lead-in at -30 to -36 dB. **The machine skips it**: its attack goes straight from silence
+  to within 6 dB of the peak. Played from word 0, the plugin spent **24 ms at about -30 dB**
+  first, and over each note's first 50 ms it was 4 dB quieter than the machine.
+- Played from the marker, the attack matches the machine's shape to within about 2 dB.
+- The machine's attack also lands about **20 ms after the note-on**, steady to ±3 ms over the
+  twelve notes. That covers the MIDI interface and the recording chain as well as the S950,
+  and there is no telling them apart from here, so no note-on delay is added.
+- 199 of the 1,075 sounds the library's programmes play have a marker past word 0.
+- Both engines crop the sound at decode time and move the loop with it; a marker at or past
+  the end of what would play is ignored, as the Studio's audition ignores it. The loop editor
+  no longer resets the marker to 0 when a loop is set. DiskEditCheck holds every sound a
+  programme plays to its sample's words from the marker on.
 
 ### A SYNTH tab: sounds with no disk, made as a disk
 

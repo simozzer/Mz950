@@ -258,6 +258,56 @@ int main (int argc, char** argv)
         }
     }
 
+    /*
+     * A note starts at the sample's start marker (header 0x20), measured on the machine.
+     * Every sound a programme plays is the sample's words from the marker on, with the loop
+     * moved to match; a marker at or past the end of what would play is ignored.
+     */
+    {
+        int marked = 0;
+        std::set<std::string> seen;
+        for (const auto& p : entries)
+        {
+            if (p.type != 'P') continue;
+            const auto patch = original.buildPatch (p);
+            if (patch == nullptr) continue;
+
+            for (const auto& k : patch->keygroups)
+            {
+                if (k.sound == nullptr || ! seen.insert (k.sound->name).second) continue;
+                const Disk::Entry* s = original.find (k.sound->name, 'S');
+                if (s == nullptr) continue;
+
+                const auto words = original.sampleWords12 (*s);
+                const long long end   = std::min<long long> (s->loopEnd, static_cast<long long> (words.size()));
+                const long long plays = k.sound->loops ? end : static_cast<long long> (words.size());
+                const long long first = s->loopStart > 0 && s->loopStart < plays ? s->loopStart : 0;
+                if (first > 0) ++marked;
+
+                const std::string where = "sample " + s->name;
+                ++checks;
+                if (static_cast<long long> (k.sound->audio.size()) != static_cast<long long> (words.size()) - first)
+                {
+                    fail (where, "plays from the start marker (length)", static_cast<int> (k.sound->audio.size()),
+                          static_cast<int> (static_cast<long long> (words.size()) - first));
+                    continue;
+                }
+                ++checks;
+                if (! k.sound->audio.empty() && k.sound->audio.front() != words[static_cast<std::size_t> (first)] / 2048.0f)
+                    fail (where, "plays from the start marker (first word)", 0, 1);
+
+                if (k.sound->loops)
+                {
+                    ++checks;
+                    if (k.sound->loopTo != static_cast<int> (end - first))
+                        fail (where, "the loop end moves with the start", k.sound->loopTo, static_cast<int> (end - first));
+                }
+            }
+        }
+        std::printf ("  %d sounds played, %d of them from a start marker past word 0\n",
+                     static_cast<int> (seen.size()), marked);
+    }
+
     // ------------------------------------------------------------- making a disk
 
     /*

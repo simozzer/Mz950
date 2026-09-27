@@ -1110,12 +1110,33 @@ namespace s950
          * library's 324 looped samples.
          */
         const long long to   = std::min<long long> (sample.loopEnd, static_cast<long long> (words.size()));
-        const long long from = std::max<long long> (0, sample.loopEnd - sample.loopLength);
+        long long       from = std::max<long long> (0, sample.loopEnd - sample.loopLength);
 
         s->loops    = sample.loopMode != 'O' && sample.loopLength > 0 && sample.loopEnd > 0 && to > from;
         s->alternates = sample.loopMode == 'A';
-        s->loopFrom = static_cast<int> (from);
-        s->loopTo   = static_cast<int> (to);
+
+        /*
+         * A note starts at the start marker (0x20), not at word 0.
+         *
+         * MEASURED, 2026-09-27: DSKA0039 GRAND1, note 60 struck twelve times on the machine.
+         * Every GRAND sample has its marker at 1000 words, past 500-750 words of lead-in at
+         * -30 to -36 dB. The machine's attack went straight from silence to within 6 dB of
+         * the peak; played from word 0, the same note first spent 24 ms at about -30 dB.
+         * Played from the marker, the attack matched the machine's shape within 2 dB.
+         *
+         * Cropping here keeps the voice unaware of it. A marker at or past the end of what
+         * would play is ignored, as the Studio's audition ignores it.
+         */
+        const long long playsTo = s->loops ? to : static_cast<long long> (words.size());
+        const long long first   = sample.loopStart > 0 && sample.loopStart < playsTo ? sample.loopStart : 0;
+        if (first > 0)
+        {
+            s->audio.erase (s->audio.begin(), s->audio.begin() + first);
+            from = std::max (from, first);
+        }
+
+        s->loopFrom = static_cast<int> (from - first);
+        s->loopTo   = static_cast<int> (to - first);
 
         return s;
     }
