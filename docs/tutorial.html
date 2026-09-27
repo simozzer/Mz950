@@ -37,6 +37,9 @@
   h3 { font-size: 1.05rem; margin: 1.8em 0 .4em; }
   p, ul, ol { margin: 0 0 1em; }
   li { margin: .35em 0; }
+  figure { margin: 1.4rem 0; }
+  figure img { width: 100%; height: auto; border-radius: 6px; border: 1px solid #ccc; }
+  figcaption { font-size: 0.9em; color: #555; margin-top: 0.4rem; }
   code, kbd {
     font: .88em/1 ui-monospace, Consolas, monospace;
     background: var(--panel);
@@ -371,34 +374,81 @@ since edited and reordered still returns the programme you meant.</p>
 
 <h3>What the window shows</h3>
 
-<ul>
-  <li><strong>Gain</strong>, and <strong>fifteen player's controls</strong> — see below.</li>
-  <li><strong>What is loaded</strong>: the disk, the programme, and for an
-      <code>.hfe</code> read off a real floppy, how the recovery went.</li>
-  <li><strong>Voices</strong>, counting what is sounding. It is there because it answers the
-      first question anyone asks of a plugin that is making no noise — is it getting the
-      notes? — without a debugger.</li>
-</ul>
+<p>Across the top: the disk and programme that are loaded (and, for an <code>.hfe</code>
+read off a real floppy, how the recovery went), <strong>Load disk…</strong>, the programme
+box, and <strong>Gain</strong> — the one control that is neither the programme nor an offset
+from it. Along the bottom, <strong>voices</strong>, counting what is sounding: it answers the
+first question anyone asks of a plugin making no noise — is it getting the notes? — without a
+debugger. Eight voices, as the machine had. A ninth note takes the voice of a note that is
+already releasing before it takes one still held.</p>
 
-<p>Eight voices, as the machine had. A ninth note takes the voice of a note that is already
-releasing before it takes one still held.</p>
+<p>Between them, <strong>three tabs</strong>, and the colours say which kind of thing each
+control is: <span style="color:#c58a2a"><strong>amber</strong></span> is what is on the disk,
+<span style="color:#2a9cae"><strong>cyan</strong></span> is an offset laid on top of it while
+you play, and <span style="color:#7b5fd6"><strong>violet</strong></span> is something the S950
+never had.</p>
 
-<h3>The player's controls</h3>
+<h3>PROGRAM — what is on the disk</h3>
 
-<p>Fifteen of them, on top of whatever programme is loaded. Every one is an <em>offset</em>
-from what the disk says rather than a setting: it reads zero until you turn it, double-clicks
-back to zero, and zero means "play what is on the floppy".</p>
+<figure>
+  <img src="img/plugin-program.png" alt="The Program tab: the keygroup strip across the keyboard, and the envelope page under it">
+  <figcaption>The Program tab. The strip shows every keygroup across the keyboard — here a
+  synth layer from E2 up and nine one-key drums below it — and the pages under it hold that
+  keygroup's settings.</figcaption>
+</figure>
 
-<p>That is not a detail. A programme carries its own cutoff and its own envelope for each
-keygroup, often quite different ones across the keyboard, and an absolute control would
-flatten all of that the moment you touched it. An offset keeps the shape its author gave the
-programme and moves the whole of it at once — which is what "brighter" means on an instrument
-like this.</p>
+<p>Every setting of every keygroup, as absolute values in the S950's own units and ranges, so
+it reads like the machine's front panel. The <strong>strip</strong> shows the keygroups
+across the keyboard, overlapping ones stacked; click one to edit it, or press <strong>All
+keygroups</strong> to move every one together (a control shows <code>*</code> where the
+keygroups disagree). <strong>The strip lights up as you play</strong>: a keygroup that answers
+a note gets brighter, with a rim and a marker at the key, so when something sounds wrong you
+can see which keygroup to look at.</p>
 
-<p>All fifteen are automatable by the host, and all fifteen answer a MIDI controller:</p>
+<p>Six pages hold the settings — <strong>Envelopes, Filter, LFO, Velocity, Tuning</strong>
+and <strong>Keys &amp; output</strong> — covering all 38 of a keygroup's bytes. An edit is
+written into the plugin's copy of the disk image: it is saved with the set (Live asks to save
+after one), a note you are holding follows the knob without restarting, and <strong>Save disk
+as…</strong> writes the edited disk as a plain <code>.img</code> that the Studio, this plugin,
+and a Gotek or HxC floppy emulator all open.</p>
+
+<figure>
+  <img src="img/plugin-program-filter.png" alt="The Program tab's Filter page">
+  <figcaption>The Filter page: the soft and hard zones' filters, the envelope amount, key
+  tracking and velocity to filter — the keygroup's own numbers.</figcaption>
+</figure>
+
+<p>When a Perform offset is moving one of these, the control shows what is actually sounding
+underneath it, in cyan: <strong>→ 52</strong>.</p>
+
+<div class="note">
+<p><strong>What the Program tab does not do</strong> is change the <em>shape</em> of a disk:
+add or delete a keygroup, a sample or a programme, rename anything, slice a break. Those stay
+in the Studio, where the rules that make writing dangerous are watched. Edit the image
+there, save it, and load it here.</p>
+</div>
+
+<h3>PERFORM — what you do on top of it</h3>
+
+<figure>
+  <img src="img/plugin-perform.png" alt="The Perform tab: the offsets, glide and polyphony, Wide, and the two envelopes as shapes">
+  <figcaption>The Perform tab. Cyan panels are offsets on top of the programme; violet ones
+  are the extras the S950 never had. Nothing here is ever written to the disk.</figcaption>
+</figure>
+
+<p><strong>Fifteen offsets</strong>, on top of whatever programme is loaded. Every one is an
+<em>offset</em> from what the disk says rather than a setting: it reads zero until you turn
+it, double-clicks back to zero, and zero means "play what is on the floppy". That is not a
+detail. A programme carries its own cutoff and its own envelope for each keygroup, often
+quite different ones across the keyboard, and an absolute control would flatten all of that
+the moment you touched it. An offset keeps the shape its author gave the programme and moves
+the whole of it at once — which is what "brighter" means on an instrument like this.</p>
+
+<p>All fifteen are automatable by the host, and all fifteen answer a MIDI controller — the
+numbers are in each panel's corner:</p>
 
 <table>
-  <tr><th>Sample</th><td>Filter</td><td>CC 74 · ±99</td></tr>
+  <tr><th>Filter</th><td>Filter</td><td>CC 74 · ±99</td></tr>
   <tr><th>VCF</th><td>Amnt</td><td>CC 70 · ±50</td></tr>
   <tr><th>VCA envelope</th><td>Attack, Decay, Sustain, Release</td>
       <td>CC 73, 75, 79, 72 · ±99</td></tr>
@@ -433,12 +483,66 @@ sound like, not an abstract curve.</p>
       which feels odd under the mouse the first time and is not a fault.</li>
 </ul>
 
-<div class="note">
-<p><strong>To change the programme itself, use the Studio.</strong> The controls above trim
-what is loaded; they do not write to the disk. Edit the image here, save it, and load the
-saved image in the plugin — or keep the Studio open beside your DAW and reload after each
-save.</p>
-</div>
+<h3>The extras — not on the S950</h3>
+
+<p>Three things the machine never had, in violet, each off by default so a disk still plays
+exactly as the machine would:</p>
+
+<table>
+  <tr><th>Glide</th><td>On, Time</td><td>CC 65, 5</td>
+      <td>Portamento. Each note slides in from the last note played in the <em>same
+      keygroup</em>, over a fixed time (CC 5: 0 is no glide, 127 is three seconds). Crossing
+      into another keygroup does not slide, letting go mid-glide stops it where it is, and
+      drums never glide.</td></tr>
+  <tr><th>Polyphony</th><td>Poly</td><td>CC 106</td>
+      <td>A limit, 1 to 8. At 1 it is <strong>mono</strong> and plays like a monosynth:
+      legato within a keygroup moves the note without restarting it, gliding if glide is
+      on, and letting go returns to the key still held. Drums play outside the limit, so a
+      kick never steals the lead.</td></tr>
+  <tr><th>Wide</th><td>On, Detune, Spread, Offset</td><td>CC 107, 108, 110, 111</td>
+      <td>Every note as two voices, one detuned flat and leaning left, one sharp by the same
+      amount and leaning right — as loud as one, centred on the true pitch. Four notes at
+      most: the machine's eight voices, two to a note.</td></tr>
+</table>
+
+<h3>SYNTH — sounds with no disk at all</h3>
+
+<figure>
+  <img src="img/plugin-synth.png" alt="The Synth tab: three oscillators and the drum kit">
+  <figcaption>The Synth tab, on the PWM strings preset with the kit switched on. Every
+  change re-renders the sound to a disk, which then becomes the loaded disk.</figcaption>
+</figure>
+
+<p>The plugin can make its own sounds, and it makes them <em>as a disk</em>. Each of the three
+<strong>oscillators</strong> is drawn as a few looped cycles of a waveform, built from its
+harmonics so it never aliases, and becomes a keygroup layered across the keyboard; the
+<strong>drums</strong> are one-shots on General MIDI's notes (kick 36, snare 38, clap 39, hats
+42 and 46, ride 51, toms 41, 43 and 45). The lot is written to a blank disk held in memory,
+and that disk becomes the loaded one — so the Program tab edits it, Glide and Wide work on
+it, the set saves it, and <strong>Save disk as…</strong> puts it on a floppy for a real S950.</p>
+
+<p>An oscillator has a <strong>kind</strong> (sine, triangle, saw, square, pulse, organ,
+glass, buzz, hollow, FM at three ratios, ring modulation at two, a bend, phase distortion,
+and white, pink and brown noise), a <strong>level</strong>, <strong>octave</strong>,
+<strong>fine</strong> tune (detune is two layers a few cents apart — the classic wide
+sound), a start <strong>phase</strong>, a <strong>shape</strong> control whose meaning follows
+the kind — pulse width, FM index, ring amount, bend, skew, or, for a plain shape, how far it
+softens toward a sine — and a <strong>sweep</strong>: how much of that shape travels across the
+loop and back. That is pulse-width modulation, an FM sweep or a filter-like morph baked into
+the sample, the way a sampler has always done it, and like every wavetable on a sampler it
+sweeps faster on higher notes.</p>
+
+<p>Each drum has its own switch, a <strong>tune</strong> (a change of sample rate, so it gets
+shorter as it goes up), a <strong>decay</strong> (the keygroup's own VCA decay), a
+<strong>tone</strong> (the zone's filter) and a <strong>level</strong>. With the kit on, the
+oscillators move up to start at E2.</p>
+
+<p>Ten <strong>presets</strong> to start from; a preset replaces the oscillators and brings its
+own envelope and filter to the disk, and leaves the drums as they were. There are no envelope
+or filter knobs on this page on purpose: they are on the disk, where the Program tab already
+edits them — and an edit made there <strong>survives a re-render</strong>. A change to a
+level, a tune or a decay reaches a note you are holding without restarting it; a change to
+the wave itself reaches the next note you play.</p>
 
 <h2>If something looks wrong</h2>
 

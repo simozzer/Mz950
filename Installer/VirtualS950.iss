@@ -156,6 +156,9 @@ Source: "{#RepoRoot}\CHANGELOG.md"; DestDir: "{app}"; Flags: ignoreversion
 ; only the plugin.
 Source: "{#RepoRoot}\docs\tutorial.html"; DestDir: "{app}\docs"; Flags: ignoreversion
 
+; The screenshots the walk-through shows. Beside it, at the path it links them by.
+Source: "{#RepoRoot}\docs\img\*.png"; DestDir: "{app}\docs\img"; Flags: ignoreversion
+
 [Registry]
 ;
 ; Where things went, for the parts of this that are not in {app} and cannot ask.

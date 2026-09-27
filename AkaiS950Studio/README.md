@@ -768,9 +768,15 @@ not on their own disk, which the format document already records as *1744 of 190
 
 ## A plugin, later
 
+> **It exists now.** The plugin is `Plugin/` — the engine and the disk format ported to C++,
+> held to this C# by cross-checks, with a window that edits programmes, plays offsets on top
+> of them, and draws its own sounds as disks. See [Plugin/README.md](../Plugin/README.md).
+> The section below is the reasoning from before it was built, kept because the decision it
+> records — a C++ port rather than a .NET host — is the one that was taken.
+
 The aim is a low-latency instrument, standalone and as a plugin. The standalone part is
-done. The plugin part **cannot be built on this machine**, and it is worth writing down
-why so the decision can be made rather than rediscovered.
+done. The plugin part **could not be built on this machine at the time**, and it is worth
+writing down why so the decision can be made rather than rediscovered.
 
 There is no .NET SDK here — only runtimes — so `dotnet build` does not work and the
 `net10.0-windows` in the csproj is aspirational. Everything is compiled by calling

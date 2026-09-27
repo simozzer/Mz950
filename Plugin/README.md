@@ -30,8 +30,11 @@ that can never lose the sound it was made with. Move the image, rename it, or op
 on another machine — it still plays. The programme comes back by name first and by position
 second, so a disk edited and reordered since still returns what you meant.
 
-**Two tabs: PROGRAM and PERFORM.** They separate the two kinds of control, which used to sit
-side by side looking alike.
+**Three tabs: PROGRAM, PERFORM and SYNTH.** They separate the kinds of control, and the
+colours say which kind a control is: amber is on the disk, cyan is an offset on top of it,
+violet is something the S950 never had.
+
+![The Program tab](../docs/img/plugin-program.png)
 
 - **PROGRAM is what's on the disk.** Every setting of every keygroup, as absolute values in the
   S950's own units and ranges, so it reads like the machine's front panel. A strip across the
@@ -42,8 +45,12 @@ side by side looking alike.
   knob. *Save disk as…* writes the edited disk as a plain `.img` for the Studio, this plugin, or
   a Gotek or HxC floppy emulator. When a Perform offset is moving a setting, the control shows
   what is actually sounding underneath it in blue, e.g. **→ 52**.
+  The strip lights up as you play: a keygroup that answers a note gets brighter, with a rim
+  and a marker at the key, so you can see which keygroup to adjust.
 - **PERFORM is what you do on top of it:** the offsets below, plus glide, polyphony and Wide.
   None of these is ever written to the disk.
+
+  ![The Perform tab](../docs/img/plugin-perform.png)
 - **SYNTH makes sounds with no disk at all** — and makes them *as a disk*. Three oscillators
   (sine, triangle, saw, square, pulse, organ, glass, buzz, hollow, three FM ratios, two ring
   modulators, a bend, phase distortion, three noise colours), each with level, octave, fine
@@ -59,6 +66,8 @@ side by side looking alike.
   survive a re-render), the set saves it, and *Save disk as…* writes it for a real S950.
   Every wave and drum is held to the C# `AkaiS950Synth` tool word for word by
   `synthcheck.ps1`; the disk it builds is read identically by the C# library.
+
+  ![The Synth tab](../docs/img/plugin-synth.png)
 
 Program edits change only the values of existing settings, one byte each. They never add or
 remove keygroups, samples or files, which stays in the Studio. `Tests/DiskEditCheck.cpp`, run
@@ -159,20 +168,38 @@ worth being sure of, and keeping it free of everything else means it can be comp
 checked on its own, long before a plugin will load.
 
 ```
-Source/S950/Cal.h        the measured constants, and the mappings from panel bytes
-Source/S950/Filter.h     6th-order Butterworth, three biquads
-Source/S950/Patch.h      Sound, KeygroupPatch, Patch — what a voice needs
-Source/S950/Disk.h/cpp   reading an .hfe or .img into a Patch
-Source/S950/Voice.h/cpp  one sounding note
-Source/S950/Engine.h/cpp eight voices, the event ring, the patch hand-off
-Tests/ConformanceCheck.cpp
-Tests/Reference.h        GENERATED — what the C# computes, to be held to
+Source/S950/Cal.h           the measured constants, and the mappings from panel bytes
+Source/S950/Filter.h        6th-order Butterworth, three biquads
+Source/S950/Patch.h         Sound, KeygroupPatch, Patch — what a voice needs
+Source/S950/Disk.h/cpp      reading an .hfe or .img into a Patch; editing keygroup settings
+                            in place; building a disk from nothing (samples, programmes,
+                            the pointer rules the hardware needs)
+Source/S950/Synth.h/cpp     the synthesis: additive waves, wavetable sweeps, FM, ring,
+                            bends, noise, the drum kit — AkaiS950Synth ported, with .NET's
+                            System.Random ported exactly
+Source/S950/SynthPatch.h/cpp the Synth tab's recipe, and its rendering to a disk
+Source/S950/Voice.h/cpp     one sounding note
+Source/S950/Engine.h/cpp    eight voices, the event ring, the patch hand-off, glide, mono,
+                            the polyphony limit, Wide
+Source/Look.h/cpp           the window's design system: panels, the knob, the colours
+Source/ProgramPage.h/cpp    the Program tab
+Source/SynthPage.h/cpp      the Synth tab
+Tests/ConformanceCheck.cpp  the engine against the C# it came from (and its own rules)
+Tests/Reference.h           GENERATED — what the C# computes, to be held to
+Tests/DiskEditCheck.cpp     the disk writer, on real disks, and a disk built from nothing
+Tests/SynthDump.cpp         the synthesis, rendered for synthcheck.ps1
+Tests/DiskDump.cpp          the disk reader, dumped for crosscheck.ps1
 ```
 
 **It compiles, and it agrees with the C# exactly.** For one commit it was a transcription
 nobody had run, because the machine it was written on had no C++ compiler. The first build
-once Visual Studio arrived was clean at `/W4`, and the conformance check passes 289 of 289 —
-with the worst relative difference across the filter's 65 cutoff points at exactly 0.
+once Visual Studio arrived was clean at `/W4`. Today `build.ps1` runs the conformance check
+(2,714 checks), then the disk-writer check on every disk in `disks/` (round-tripping every
+keygroup setting and checking no other byte moves, then building a disk from nothing and a
+synth disk and asserting every pointer the hardware cares about), and only then builds the
+plugin. Two more checks run by hand: `crosscheck.ps1` reads real and built disks with the C#
+library and this one and diffs the dumps; `synthcheck.ps1` renders 45 waves and drums with the
+C# synth and this port and compares them word for word — all 45 identical.
 
 ## What it needs
 

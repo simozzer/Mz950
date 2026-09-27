@@ -12,8 +12,11 @@ was written for the purpose, recorded, and read back; where a number is still an
 assumption the source says so.
 
 It plays a disk exactly as the machine would, with a few optional extras the machine never
-had: glide, a polyphony limit with a mono legato mode, and Wide (a detuned stereo pair per
-note). Each is labelled "not on the S950" and is off by default.
+had: glide, a polyphony limit with a mono legato mode, Wide (a detuned stereo pair per
+note), and a **Synth tab** that draws its own sounds — three oscillators and a drum kit —
+*as an S950 disk*, so they go through the same voice, can be edited like any programme, and
+can be written to a floppy for the real machine. Each extra is labelled "not on the S950"
+and is off by default.
 
 > **Not affiliated with Akai.** Mz950 is an independent project by Simon Moscrop. It is not
 > affiliated with, endorsed or sponsored by Akai Professional or inMusic. Akai, S900 and S950
@@ -23,6 +26,8 @@ note). Each is labelled "not on the S950" and is off by default.
 > The project was called *VirtualS950* until it was renamed to Mz950. Some folder names in the
 > source (`AkaiS950Engine`, `AkaiS950Studio`, …) still carry the old naming. They are internal
 > and describe what the code works with.
+
+![The plugin's Program tab: the keygroups across the keyboard, and one keygroup's settings](docs/img/plugin-program.png)
 
 ![The editor, on a program's first keygroup](AkaiS950Studio/screenshot-keygroups.png)
 
@@ -35,8 +40,10 @@ Gotek, play it from a MIDI keyboard, and use the plugin in a DAW. The editor ope
 
 The plugin's half is also in [Plugin/README.md](Plugin/README.md#using-it) — how a disk is
 loaded, how programmes reach the host's own selector, what a saved song remembers (all of it:
-the whole image rides in the project), and the fifteen player's controls with the MIDI
-controller numbers that reach them.
+the whole image rides in the project), and the three tabs: **Program**, which edits every
+keygroup setting on the disk; **Perform**, the fifteen offsets with the MIDI controller
+numbers that reach them, plus glide, polyphony and Wide; and **Synth**, which makes sounds
+with no disk at all.
 
 [**CHANGELOG.md**](CHANGELOG.md) is what changed between releases, and is where the notes for
 a tag come from.
@@ -50,6 +57,7 @@ a tag come from.
 | **`AkaiS950List`** | the format — HFE and raw images, the directory, samples, programs. |
 | **`AkaiS950Tests`** | the checks. |
 | **`AkaiS950Synth`** | a workshop tool, not part of the app: writes disks of synthesised sounds from nothing. |
+| **`Plugin`** | the VST3 and standalone player: the engine and the format ported to C++ (no JUCE in that half), held to the C# by three cross-checks, with the plugin window on top. |
 
 `AkaiS950Engine` is deliberately sealed off. It knows nothing about WinForms, nothing
 about disks, and nothing about where its notes come from; its entire interface is
@@ -57,10 +65,10 @@ about disks, and nothing about where its notes come from; its entire interface i
 the render path and never locks — a garbage collection inside an audio callback is a
 click, and a click in a plugin is somebody's ruined take.
 
-That is not tidiness. It is what would let a VST3 or CLAP wrapper host the same engine
-without a line of it changing. See **A plugin, later** in
-[the Studio's README](AkaiS950Studio/README.md#a-plugin-later) for what is missing and
-what it would take.
+That is not tidiness. It is what let the plugin happen: `Plugin/Source/S950` is that engine
+ported to C++ line for line, still depending on nothing, and held to the C# by a conformance
+check that compares thousands of numbers — so the plugin and the editor are one instrument
+with two front ends. See [Plugin/README.md](Plugin/README.md) for the port and its checks.
 
 ## Building it
 
