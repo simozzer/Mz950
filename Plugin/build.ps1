@@ -176,8 +176,8 @@ if ($LASTEXITCODE -ne 0) { Write-Error "the plugin build failed" }
     the sources is then visible rather than implied.
 #>
 $artefacts = @(
-    (Join-Path $buildDir "VirtualS950_artefacts\Release\VST3\VirtualS950.vst3\Contents\x86_64-win\VirtualS950.vst3"),
-    (Join-Path $buildDir "VirtualS950_artefacts\Release\Standalone\VirtualS950.exe")
+    (Join-Path $buildDir "VirtualS950_artefacts\Release\VST3\Mz950.vst3\Contents\x86_64-win\Mz950.vst3"),
+    (Join-Path $buildDir "VirtualS950_artefacts\Release\Standalone\Mz950.exe")
 )
 
 $newest = Get-ChildItem (Join-Path $root "Source") -Recurse -Include *.cpp,*.h |

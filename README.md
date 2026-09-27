@@ -1,12 +1,27 @@
-# Virtual S950
+# Mz950
 
-An Akai S900/S950 as a playable instrument: it loads the floppy images, and it plays the
-programmes on them through an emulation of the machine's own voice — the filter, both
-envelopes and the vibrato, eight notes at a time, from a MIDI keyboard.
+An independent sampler that plays **Akai S900/S950 floppy disk images**. It loads the images
+and plays the programmes on them through an emulation of that machine's voice: the filter,
+both envelopes and the vibrato, eight notes at a time, from a MIDI keyboard. It comes as a
+VST3 plugin and a standalone player, plus **Mz950 Studio**, an editor that opens, edits and
+writes the disks back out.
 
 Every constant in that emulation was **measured off a real S950**, not guessed at. A run
 was written for the purpose, recorded, and read back; where a number is still an
 assumption the source says so.
+
+It plays a disk exactly as the machine would, with a few optional extras the machine never
+had: glide, a polyphony limit with a mono legato mode, and Wide (a detuned stereo pair per
+note). Each is labelled "not on the S950" and is off by default.
+
+> **Not affiliated with Akai.** Mz950 is an independent project by Simon Moscrop. It is not
+> affiliated with, endorsed or sponsored by Akai Professional or inMusic. Akai, S900 and S950
+> are trademarks of their respective owners, used here only to say which disks and which
+> machine it is compatible with.
+>
+> The project was called *VirtualS950* until it was renamed to Mz950. Some folder names in the
+> source (`AkaiS950Engine`, `AkaiS950Studio`, …) still carry the old naming. They are internal
+> and describe what the code works with.
 
 ![The editor, on a program's first keygroup](AkaiS950Studio/screenshot-keygroups.png)
 
@@ -49,7 +64,7 @@ what it would take.
 ## Building it
 
 ```powershell
-.\build.ps1          # AkaiS950Studio.exe, beside the script
+.\build.ps1          # Mz950Studio.exe, beside the script
 .\build.ps1 -Run     # and start it
 ```
 

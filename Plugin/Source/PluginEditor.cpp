@@ -25,9 +25,11 @@ namespace
     std::unique_ptr<juce::PropertiesFile> pluginSettings()
     {
         juce::PropertiesFile::Options options;
-        options.applicationName     = "VirtualS950";
+        // Renamed with the product. All it holds is the last folder a disk came from, so
+        // starting afresh after the rename costs one extra click, once.
+        options.applicationName     = "Mz950";
         options.filenameSuffix      = "settings";
-        options.folderName          = "VirtualS950";
+        options.folderName          = "Mz950";
         options.osxLibrarySubFolder = "Application Support";
 
         return std::make_unique<juce::PropertiesFile> (options);
@@ -65,9 +67,13 @@ namespace
     juce::File installedLibrary()
     {
        #if JUCE_WINDOWS
-        // Per-user install first, then machine-wide - the order Inno's HKA resolves in.
+        // Per-user install first, then machine-wide - the order Inno's HKA resolves in. The
+        // Mz950 keys first; the VirtualS950 ones are what an install from before the rename
+        // wrote, and its library is still just as much where it said.
         const char* const keys[] =
         {
+            "HKEY_CURRENT_USER\\Software\\Mz950\\DiskLibrary",
+            "HKEY_LOCAL_MACHINE\\Software\\Mz950\\DiskLibrary",
             "HKEY_CURRENT_USER\\Software\\VirtualS950\\DiskLibrary",
             "HKEY_LOCAL_MACHINE\\Software\\VirtualS950\\DiskLibrary"
         };
@@ -969,7 +975,7 @@ void VirtualS950Editor::paint (juce::Graphics& g)
 
     g.setColour (juce::Colours::white);
     g.setFont (juce::FontOptions (22.0f));
-    g.drawText ("VirtualS950", 16, 12, getWidth() - 32, 28,
+    g.drawText ("Mz950", 16, 12, getWidth() - 32, 28,
                 juce::Justification::centredLeft, true);
 
     /*
@@ -992,9 +998,22 @@ void VirtualS950Editor::paint (juce::Graphics& g)
     g.setColour (juce::Colours::darkgrey);
     g.setFont (juce::FontOptions (10.0f));
     g.drawText (juce::CharPointer_UTF8 ("Copyright \xc2\xa9 2026 Simon Moscrop  -  AGPLv3, "
-                                        "no warranty  -  github.com/simozzer/VirtualS950"),
+                                        "no warranty  -  github.com/simozzer/Mz950"),
                 16, getHeight() - 22, getWidth() - 32, 16,
                 juce::Justification::centredRight, true);
+
+    /*
+     * What this is, and what it is not, beside the name.
+     *
+     * Naming Akai to say what the plugin is COMPATIBLE with is the ordinary, permitted kind
+     * of mention; the plugin wearing the name was not, which is why it is called Mz950. The
+     * disclaimer sits where the name is, rather than in small print nobody reaches.
+     */
+    g.setColour (juce::Colours::grey);
+    g.setFont (juce::FontOptions (11.0f));
+    g.drawText ("plays Akai S900/S950 disks  -  independent, not affiliated with Akai or inMusic",
+                100, 22, getWidth() - 100 - 16 - 126, 16,
+                juce::Justification::centredLeft, true);
 
     g.setColour (juce::Colours::grey);
     g.setFont (juce::FontOptions (13.0f));

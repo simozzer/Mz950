@@ -1,12 +1,17 @@
-# VirtualS950 — the plugin
+# Mz950 — the plugin
 
-The S950 engine as a VST3, so a programme off a real disk can be played from a DAW.
+The S950-compatible engine as a VST3, so a programme off a real Akai disk can be played from a
+DAW. Mz950 is independent and not affiliated with Akai or inMusic.
+
+It was called VirtualS950 before the rename, and it is still the same plugin to a host. The
+plugin's identity codes (`Smoz` / `Ak95` in `CMakeLists.txt`) did not change, so Live sets saved
+with VirtualS950 open with Mz950 in its place. **Never change those two codes.**
 
 ## Using it
 
 The installer puts the VST3 in the folder hosts scan and the standalone player in the
 program group. If your DAW has already scanned its plugin folders, tell it to rescan;
-**VirtualS950** then appears under instruments.
+**Mz950** then appears under instruments.
 
 **Load a disk.** Press **Load disk…** and pick an `.hfe` or `.img`. The browser opens
 *inside* the plugin window rather than as a system dialog — a native chooser goes to the
@@ -168,7 +173,7 @@ with the worst relative difference across the filter's 65 cutoff points at exact
   installed.
 
 JUCE 9 is **AGPLv3** unless you buy a licence — not GPL3, which is what JUCE 6 and 7 were.
-`VirtualS950` is AGPLv3 to match, so there is no gap between what this repository says and
+`Mz950` is AGPLv3 to match, so there is no gap between what this repository says and
 what the JUCE parts oblige. A closed-source plugin would need a commercial JUCE licence.
 
 ## Building the plugin
@@ -187,7 +192,7 @@ the same way it finds the compiler. That produces three things:
   elevation, and building as administrator to test an audio plugin is the wrong trade. The
   per-user folder is the other location the VST3 specification names. In Ableton, add it once
   under Preferences → Plug-Ins → VST3 Plug-In Custom Folder.
-- a **standalone** at `build/VirtualS950_artefacts/Release/Standalone/VirtualS950.exe`, which
+- a **standalone** at `build/VirtualS950_artefacts/Release/Standalone/Mz950.exe`, which
   opens without a DAW. That is what makes "is the plugin broken, or is the host unhappy with
   it" answerable in one step rather than two.
 - the **conformance check**, at `build/Release/ConformanceCheck.exe`.

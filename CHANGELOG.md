@@ -8,6 +8,28 @@ assumption it says that too — those are the ones another afternoon with a reco
 
 ## Unreleased
 
+### VirtualS950 is now Mz950
+
+The product no longer wears Akai's model name. Mz950 plays Akai S900/S950 disks and says so,
+but it isn't Akai's product, and every place a user sees it now says that.
+
+- **Renamed:** the plugin is **Mz950** (`Mz950.vst3`, standalone `Mz950.exe`). The editor is
+  **Mz950 Studio** (`Mz950Studio.exe`). The installer is `Mz950-<version>-setup.exe`. The
+  window titles, the About box, the tutorial and the READMEs all use the new names.
+- **A disclaimer** ("independent, not affiliated with Akai or inMusic; Akai, S900 and S950 are
+  trademarks of their respective owners") appears beside the plugin's name, in the Studio's
+  About box, on the installer's first page, in the tutorial and in the README.
+- **Existing Live sets keep working.** A host identifies the plugin by its two codes, `Smoz`
+  and `Ak95`, which are unchanged, so sets saved with VirtualS950 open with Mz950.
+- **Upgrading replaces the old install.** The installer's AppId is unchanged, so installing over
+  VirtualS950 upgrades it and removes the files and shortcuts left under the old names. That
+  includes the old `VirtualS950.vst3`, which carries the same plugin ID. The build's own
+  install step removes it too.
+- **The sound library is still found** after the upgrade: the plugin reads the new `Mz950`
+  registry key first, then the old one.
+- **Not renamed:** internal folder and namespace names such as `AkaiS950Engine`. They are not
+  user-facing, and renaming them would be a large change for little benefit.
+
 ### The plugin edits programmes: PROGRAM and PERFORM tabs
 
 Every keygroup setting can now be edited in the plugin, as absolute values in the S950's own

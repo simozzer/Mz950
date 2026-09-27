@@ -1576,7 +1576,7 @@ namespace AkaiS950Studio
             {
                 if (_appTitle != null) return _appTitle;
 
-                _appTitle = "Akai S950 Studio";
+                _appTitle = "Mz950 Studio";
                 try
                 {
                     string exe = System.Reflection.Assembly.GetExecutingAssembly().Location;
@@ -2274,7 +2274,7 @@ namespace AkaiS950Studio
         void OnAbout(object sender, EventArgs e)
         {
             MessageBox.Show(this,
-                "Akai S950 Studio" + Environment.NewLine + Environment.NewLine +
+                "Mz950 Studio" + Environment.NewLine + Environment.NewLine +
                 "Reads Akai S900/S950 800K floppy images (.hfe and raw .img)," +
                 Environment.NewLine +
                 "decoding the MFM bitstream, directory, allocation table," +
@@ -2297,7 +2297,15 @@ namespace AkaiS950Studio
                 Environment.NewLine +
                 "those terms; see the LICENSE file, or gnu.org/licenses." +
                 Environment.NewLine + Environment.NewLine +
-                "Source: github.com/simozzer/VirtualS950" +
+                "Source: github.com/simozzer/Mz950" +
+                Environment.NewLine + Environment.NewLine +
+
+                // Compatible with Akai's disks; not Akai's product, and says so.
+                "An independent project. Akai, S900 and S950 are trademarks" +
+                Environment.NewLine +
+                "of their respective owners; Mz950 is not affiliated with or" +
+                Environment.NewLine +
+                "endorsed by Akai Professional or inMusic." +
                 Environment.NewLine + Environment.NewLine +
                 AppTitle.Substring(AppTitle.IndexOf("Studio") + 6).Trim(),
 

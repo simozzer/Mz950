@@ -1,6 +1,7 @@
-# Akai S950 Studio
+# Mz950 Studio
 
-A WinForms browser and editor for Akai S900/S950 floppy images. Load, inspect,
+A WinForms browser and editor for Akai S900/S950 floppy images. (Mz950 is independent and not
+affiliated with Akai or inMusic; it was called Akai S950 Studio before the project was renamed.) Load, inspect,
 edit parameters, and write the result to a new image — the file you opened is
 never modified.
 
@@ -53,9 +54,9 @@ progress bar, so the window stays responsive.
 ## Running it
 
 ```
-AkaiS950Studio.exe             reopen the last session
-AkaiS950Studio.exe E:\         load every image on the stick at startup
-AkaiS950Studio.exe disk.hfe    load one image
+Mz950Studio.exe                reopen the last session
+Mz950Studio.exe E:\            load every image on the stick at startup
+Mz950Studio.exe disk.hfe       load one image
 ```
 
 ### How hard it strikes
@@ -146,7 +147,7 @@ to 96 kHz the audio is converted instead so the pitch still comes out right.
 
 ## Building
 
-The included `AkaiS950Studio.exe` was produced without an SDK, by compiling against
+The included `Mz950Studio.exe` was produced without an SDK, by compiling against
 .NET Framework 4.x. It runs as-is on Windows.
 
 For a modern build, install a .NET SDK and:

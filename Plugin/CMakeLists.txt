@@ -45,11 +45,28 @@ set(VST3_DESTINATION "$ENV{LOCALAPPDATA}/Programs/Common/VST3"
 #
 set(ICON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../Icon")
 
+#
+# THE NAME AND THE IDENTITY ARE TWO DIFFERENT THINGS
+#
+# PRODUCT_NAME is what a player sees: the plugin in a host's browser, the .vst3 file, the
+# standalone's window. It was "VirtualS950" and is now "Mz950", so the product no longer
+# wears another company's model name - Akai and S950 are inMusic's trademarks, and this is
+# an independent project that is merely compatible with their disks.
+#
+# The two codes below are the plugin's IDENTITY, and must NEVER change. A VST3's class ID
+# is made from them and nothing else (JUCE: VST3Interface::jucePluginId), and a host finds
+# the plugin in a saved project by that ID. Change either and every Live set ever made with
+# this plugin opens with it missing. "Ak95" is only four letters inside the binary; nobody
+# sees it.
+#
+# The CMake target is still called VirtualS950 for the same kind of reason: it names build
+# folders and scripts, not anything a player sees, and renaming it buys nothing.
+#
 juce_add_plugin(VirtualS950
     COMPANY_NAME                "simozzer"
-    PRODUCT_NAME                "VirtualS950"
-    PLUGIN_MANUFACTURER_CODE    Smoz
-    PLUGIN_CODE                 Ak95
+    PRODUCT_NAME                "Mz950"
+    PLUGIN_MANUFACTURER_CODE    Smoz          # never change - see above
+    PLUGIN_CODE                 Ak95          # never change - see above
 
     # Explicitly, because JUCE does NOT inherit it from project(). Without this the VST3
     # reported 0.1.0 - JUCE's own default - while the project said 0.3.0 and the installer
@@ -92,7 +109,7 @@ target_include_directories(VirtualS950 PRIVATE Source)
 #
 add_custom_command(TARGET VirtualS950_VST3 POST_BUILD
     COMMAND "${CMAKE_COMMAND}"
-            "-DSRC=${CMAKE_CURRENT_BINARY_DIR}/VirtualS950_artefacts/$<CONFIG>/VST3/VirtualS950.vst3"
+            "-DSRC=${CMAKE_CURRENT_BINARY_DIR}/VirtualS950_artefacts/$<CONFIG>/VST3/Mz950.vst3"
             "-DDST=${VST3_DESTINATION}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/install_vst3.cmake"
     VERBATIM)

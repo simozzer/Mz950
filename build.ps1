@@ -1,7 +1,7 @@
 <#
     Build the Studio application.
 
-        .\build.ps1                 builds AkaiS950Studio.exe beside this script
+        .\build.ps1                 builds Mz950Studio.exe beside this script
         .\build.ps1 -Run            builds it and starts it
         .\build.ps1 -Out somewhere\ builds it there instead
 
@@ -32,7 +32,7 @@ if (-not (Test-Path $csc)) {
     Write-Error "No .NET Framework 4.0 compiler found. Looked in $env:WINDIR\Microsoft.NET."
 }
 
-if ($Out -eq "") { $Out = Join-Path $root "AkaiS950Studio.exe" }
+if ($Out -eq "") { $Out = Join-Path $root "Mz950Studio.exe" }
 
 # Program.cs in the List project is the command-line tool's entry point, and two Mains
 # in one assembly is an error rather than a choice.

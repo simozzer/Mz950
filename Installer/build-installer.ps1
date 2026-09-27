@@ -55,7 +55,7 @@ if (-not $SkipBuild -and -not $CheckOnly) {
     Say ""
     Say "  building the editor" "Cyan"
     & (Join-Path $repo "build.ps1")
-    Built (Join-Path $repo "AkaiS950Studio.exe") "the editor"
+    Built (Join-Path $repo "Mz950Studio.exe") "the editor"
 
     Say ""
     Say "  building the plugin" "Cyan"
@@ -77,7 +77,7 @@ if (-not $SkipBuild -and -not $CheckOnly) {
 
     # A host holding the old plugin open stops it being INSTALLED, not built, and the
     # installer packages what was built - so that is not a reason to stop here.
-    if (-not (Test-Path (Join-Path $buildDir "VirtualS950_artefacts\Release\VST3\VirtualS950.vst3"))) {
+    if (-not (Test-Path (Join-Path $buildDir "VirtualS950_artefacts\Release\VST3\Mz950.vst3"))) {
         Write-Error "the plugin did not build"
     }
 }
@@ -109,10 +109,10 @@ if ($disks.Count -lt 1) { Write-Error "no disk images turned up in $staging" }
 $artefacts = Join-Path $repo "Plugin\build\VirtualS950_artefacts\Release"
 
 $wanted = @(
-    @{ What = "the editor";            Path = Join-Path $repo "AkaiS950Studio.exe" },
-    @{ What = "the standalone";        Path = Join-Path $artefacts "Standalone\VirtualS950.exe" },
-    @{ What = "the VST3 bundle";       Path = Join-Path $artefacts "VST3\VirtualS950.vst3" },
-    @{ What = "the plugin binary";     Path = Join-Path $artefacts "VST3\VirtualS950.vst3\Contents\x86_64-win\VirtualS950.vst3" },
+    @{ What = "the editor";            Path = Join-Path $repo "Mz950Studio.exe" },
+    @{ What = "the standalone";        Path = Join-Path $artefacts "Standalone\Mz950.exe" },
+    @{ What = "the VST3 bundle";       Path = Join-Path $artefacts "VST3\Mz950.vst3" },
+    @{ What = "the plugin binary";     Path = Join-Path $artefacts "VST3\Mz950.vst3\Contents\x86_64-win\Mz950.vst3" },
     @{ What = "the readme";            Path = Join-Path $repo "README.md" },
     @{ What = "the plugin readme";     Path = Join-Path $repo "Plugin\README.md" },
     @{ What = "the tutorial";          Path = Join-Path $repo "docs\tutorial.html" },

@@ -1,6 +1,6 @@
 # Installer
 
-One installer for both halves: **Akai S950 Studio**, which opens disk images and edits
+One installer for both halves of Mz950: **Mz950 Studio**, which opens disk images and edits
 programmes, and the **VST3 plugin**, which plays those same disks in a DAW. They share the
 engine — the measured constants in `Cal.cs` and `Cal.h` agree to the digit — so they are one
 instrument with two front ends rather than two programs.
@@ -31,9 +31,14 @@ is the floor because the script uses the `x64compatible` architecture name.
 
 | | Where | Chooseable |
 |---|---|---|
-| `AkaiS950Studio.exe` | `{autopf}\VirtualS950` | yes |
-| `VirtualS950.vst3` | `{autocf}\VST3` | yes |
-| `VirtualS950.exe` (standalone) | `{autopf}\VirtualS950` | yes |
+| `Mz950Studio.exe` | `{autopf}\Mz950` | yes |
+| `Mz950.vst3` | `{autocf}\VST3` | yes |
+| `Mz950.exe` (standalone) | `{autopf}\Mz950` | yes |
+
+An install of the old *VirtualS950* is upgraded in place, because the installer's AppId never
+changed. It keeps its folder, and the files and shortcuts it had under the old names are
+removed. That includes the old `VirtualS950.vst3`, which carries the same plugin ID as the new
+bundle and must not be left beside it.
 
 The installer asks at the start whether it is for everyone or just you, and both
 destinations follow that answer. A VST3 has two homes on Windows — the machine-wide one
@@ -70,7 +75,7 @@ Anyone who does: any ffmpeg on `PATH` will do, and nothing needs configuring.
 
 ## Before giving it to anyone else
 
-**VirtualS950 is AGPLv3** — see `LICENSE` at the root of the repository. That is not an
+**Mz950 is AGPLv3** — see `LICENSE` at the root of the repository. That is not an
 arbitrary choice: the plugin links JUCE, which since version 8 is AGPLv3 unless you have
 bought a commercial licence, and matching it means the repository's terms and the JUCE
 parts' terms are the same thing rather than two sets in one project.
