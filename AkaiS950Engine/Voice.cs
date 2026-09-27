@@ -37,7 +37,12 @@ namespace AkaiS950Engine
         /// <summary>Which keygroup of the programme this voice came from, or -1.</summary>
         public int KeygroupIndex { get { return _kg == null ? -1 : _kg.KeygroupIndex; } }
         public long StartedAt { get { return _startedAt; } }
-        public bool Held { get { return _stage != Stage.Idle && _stage != Stage.Release; } }
+        /// <summary>The KEY is down. False from the note-off on, even while the envelope is
+        /// still waiting out Cal.NoteOffLatencySeconds before it releases.</summary>
+        public bool Held { get { return _stage != Stage.Idle && _stage != Stage.Release && !_keyUp; } }
+
+        bool _keyUp;
+        int  _pendingRelease;
 
         enum Stage { Idle, Attack, Decay, Sustain, Release }
 
@@ -177,6 +182,8 @@ namespace AkaiS950Engine
             _sustain = _peak * Cal.DbToGain(sustainDb);
 
             _stage = _attack > 0.0005 ? Stage.Attack : Stage.Decay;
+            _keyUp = false;
+            _pendingRelease = 0;
             _t = 0;
             _gain = _attack > 0.0005 ? 0 : _peak;
 
@@ -296,9 +303,25 @@ namespace AkaiS950Engine
             _fadeSeconds = Cal.LfoDelayFadeConstant / Math.Max(1, 100 - kg.LfoDelay);
         }
 
-        /// <summary>Let go of the key. The note falls at its own release rate.</summary>
+        /// <summary>
+        /// A note-off, as the machine takes one: the key is up now, and the release begins
+        /// Cal.NoteOffLatencySeconds later.
+        /// </summary>
+        public void LetGo()
+        {
+            if (_stage == Stage.Idle || _stage == Stage.Release || _keyUp) return;
+
+            _keyUp = true;
+            _pendingRelease = Math.Max(1, (int)Math.Round(Cal.NoteOffLatencySeconds * _sampleRate));
+        }
+
+        /// <summary>Let go of the key, now. The note falls at its own release rate. What
+        /// all-notes-off uses; a note-off from a player goes through LetGo.</summary>
         public void Release()
         {
+            _keyUp = true;
+            _pendingRelease = 0;
+
             if (_stage == Stage.Idle || _stage == Stage.Release) return;
 
             // A one-shot keygroup is a drum: it plays through whatever the key does.
@@ -357,6 +380,13 @@ namespace AkaiS950Engine
             while (done < count && _stage != Stage.Idle)
             {
                 int n = Math.Min(ControlBlock, count - done);
+
+                // A note-off waiting out its latency lets go at the block where the wait ends.
+                if (_pendingRelease > 0)
+                {
+                    _pendingRelease -= n;
+                    if (_pendingRelease <= 0) Release();
+                }
 
                 // --- the modulators, once per block
                 _filter.SetCutoff(CutoffNow(), _sampleRate);

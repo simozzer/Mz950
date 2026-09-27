@@ -845,6 +845,12 @@ namespace
                 engine.noteOn (60, 100);
                 engine.render (buffer.data(), 2400);      // held
                 engine.noteOff (60);
+
+                // the machine's note-off latency, before the release begins
+                const int latency = static_cast<int> (std::lround (s950::cal::NoteOffLatencySeconds * 48000.0));
+                std::vector<float> wait (static_cast<std::size_t> (latency));
+                engine.render (wait.data(), latency);
+
                 engine.render (buffer.data(), 2400);      // let go
                 return rms (buffer);
             };
@@ -1833,6 +1839,53 @@ namespace
             run (engine, 32);
             check (engine.getVoice (0).getNote() == 60, "letting go returns to the held LEAD key",
                    engine.getVoice (0).getNote(), 60);
+        }
+
+        // --------------------------------------------------- the note-off latency
+
+        std::printf ("\n  the note-off latency\n");
+
+        {
+            // A held saw, let go: the key is up at once, the level holds for the latency,
+            // and then the release begins. See cal::NoteOffLatencySeconds.
+            auto ringing = makePatch (false);
+            ringing->keygroups[0].vcaRelease = 30;
+
+            s950::Engine engine (48000.0);
+            engine.setPatch (ringing);
+            engine.noteOn (60, 127);
+            run (engine, 9600);
+            const double held = rms (buffer);
+
+            engine.noteOff (60);
+            run (engine, 32);
+            check (! engine.getVoice (0).isHeld(), "the key is up at once", 1, 0);
+
+            const int latency = static_cast<int> (std::lround (s950::cal::NoteOffLatencySeconds * 48000.0));
+            run (engine, latency - 96);                     // just short of the latency
+            const double waiting = rms (buffer);
+            check (waiting > held * 0.95, "the level holds until the latency is over", waiting, held);
+
+            run (engine, 2400);                             // the release has begun
+            check (rms (buffer) < held * 0.8, "and then it falls", rms (buffer), held);
+        }
+
+        // All-notes-off is a panic: no latency. Within the first 10 ms - well inside the
+        // 15 ms a note-off waits - it is already quieter than the same note left alone.
+        {
+            auto level = [&] (bool panic)
+            {
+                s950::Engine engine (48000.0);
+                engine.setPatch (patch);
+                engine.noteOn (60, 127);
+                run (engine, 4800);
+                if (panic) engine.allNotesOff();
+                run (engine, 480);
+                return rms (buffer);
+            };
+
+            const double left = level (false), panicked = level (true);
+            check (panicked < left * 0.5, "all-notes-off releases at once", panicked, left);
         }
 
         // ------------------------------------------------ what the window lights up

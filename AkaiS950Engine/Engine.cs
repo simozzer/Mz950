@@ -288,7 +288,8 @@ namespace AkaiS950Engine
         {
             for (int i = 0; i < _voices.Length; i++)
                 if (_voices[i].Active && _voices[i].Note == note && _voices[i].Held)
-                    _voices[i].Release();
+                    _voices[i].LetGo();      // the machine's note-off latency; see Cal
+
         }
 
         /// <summary>

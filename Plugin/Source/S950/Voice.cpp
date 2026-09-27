@@ -8,6 +8,8 @@ namespace s950
     {
         crossfade     = fade;
         handedOver    = false;
+        keyUp         = false;
+        pendingRelease = 0;
         wideSign      = 0;              // a plain voice until makeWide says otherwise
         partner       = -1;
         wideRatio     = 1.0;
@@ -270,8 +272,24 @@ namespace s950
         fadeSeconds = cal::LfoDelayFadeConstant / std::max (1.0, 100.0 - delay);
     }
 
+    void Voice::letGo()
+    {
+        if (stage == Stage::idle || stage == Stage::release || keyUp)
+            return;
+
+        keyUp          = true;
+        pendingRelease = std::max (1, static_cast<int> (std::lround (cal::NoteOffLatencySeconds * sampleRate)));
+
+        // Letting go mid-glide stops the glide - a rule about the KEY, so it takes effect
+        // now, not when the envelope gets round to releasing. See release().
+        glidePerSecond = 0.0;
+    }
+
     void Voice::release()
     {
+        keyUp          = true;
+        pendingRelease = 0;
+
         if (stage == Stage::idle || stage == Stage::release)
             return;
 
@@ -301,6 +319,11 @@ namespace s950
 
     void Voice::handOver()
     {
+        // A key already up but still inside the note-off latency is released now: a glide
+        // taking it over is no reason to let it ring its extra 15 ms as a unison.
+        if (keyUp && stage != Stage::idle && stage != Stage::release)
+            release();
+
         if (stage != Stage::release || handedOver)
             return;
 
@@ -369,6 +392,15 @@ namespace s950
         while (done < count && stage != Stage::idle)
         {
             const int n = std::min (ControlBlock, count - done);
+
+            // A note-off waiting out its latency lets go at the block where the wait ends:
+            // within one control block, 0.7 ms at 48 kHz, of when the machine would.
+            if (pendingRelease > 0)
+            {
+                pendingRelease -= n;
+                if (pendingRelease <= 0)
+                    release();
+            }
 
             // --- the modulators, once per block. The envelopes are rebuilt from the trims
             // first, so a control moved under a held note is heard on that note.

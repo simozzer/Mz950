@@ -191,7 +191,7 @@ namespace s950
 
             case EvAllOff:
                 heldCount = 0;
-                for (int i = 0; i < Polyphony; ++i) releaseVoice (i);
+                for (int i = 0; i < Polyphony; ++i) releaseVoice (i, true);   // a panic: no latency
                 break;
 
             default: break;
@@ -512,7 +512,7 @@ namespace s950
      * Only when this voice is the one the keygroup remembers. Letting go of an older note
      * of a chord says nothing about where the keygroup's line has got to.
      */
-    void Engine::releaseVoice (int i)
+    void Engine::releaseVoice (int i, bool now)
     {
         Voice& v = voices[i];
 
@@ -525,7 +525,9 @@ namespace s950
                 glideFrom[k] = GlideMemory {};
         }
 
-        v.release();
+        // A note-off is taken the way the machine takes one: the key is up now, the
+        // envelope lets go cal::NoteOffLatencySeconds later.
+        if (now) v.release(); else v.letGo();
     }
 
     /*

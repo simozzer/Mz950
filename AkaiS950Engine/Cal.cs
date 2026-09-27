@@ -401,6 +401,20 @@ namespace AkaiS950Engine
         public const double VcaReleaseDb = 42.5;
 
         /// <summary>
+        /// How long after a note-off the release begins: 15 ms.
+        ///
+        /// Measured 2026-09-27 on DSKA0039 GRAND1 from a clean A/B of one MIDI clip through a
+        /// real S950 and the plugin. The release RATE already matched (185 against 188 dB/s);
+        /// what did not was how much tail survived each gap after a note-off - 2.0 to 3.2 dB
+        /// less than the hardware, in every gap. A slower release cannot fix that evenly; a
+        /// release that starts 15 ms later fixes all six gaps at once, to a mean of +0.13 dB.
+        /// The KEY is up at once - voice stealing sees that immediately; only the envelope
+        /// waits. All-notes-off does not wait. Plugin/Source/S950/Cal.h has the full account.
+        /// One programme and one clip: a dedicated run should confirm it.
+        /// </summary>
+        public const double NoteOffLatencySeconds = 0.015;
+
+        /// <summary>
         /// WHERE A SUSTAIN OF ZERO ENDS UP: silence, not SustainDb down.
         ///
         /// The sustain plateau is a straight line in decibels from stored 99 down to stored

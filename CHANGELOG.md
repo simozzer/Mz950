@@ -8,6 +8,28 @@ assumption it says that too — those are the ones another afternoon with a reco
 
 ## Unreleased
 
+### The release starts 15 ms after the note-off, as on the machine
+
+Measured on DSKA0039 GRAND1 from a clean A/B: a 368-note house-piano clip at 120 bpm played
+from the same MIDI through a real S950 and through the plugin, recorded with headroom (peak
+-6.8 dBFS, no flat runs). The MIDI replayed offline matched the plugin half of the take to
+0.76 dB rms, so candidate changes could be tested against the hardware half directly.
+
+- **The release rate was already right**: 185 dB/s on the hardware, 188 in the engine.
+- **But every gap after a note-off had 2.0–3.2 dB less tail** than the hardware - heard as
+  "not enough tail". A slower release can't fix that evenly: it leaves the early gaps short
+  and pushes the later ones over. A release that **starts 15 ms later** fixes all six gaps at
+  once: from a mean of +2.47 dB short to **+0.13 dB**, each gap within ±0.2 dB but one at +0.8.
+- The **key** counts as up immediately - glide's hand-over, mono and voice stealing see it at
+  once, and letting go mid-glide still stops the glide at once. Only the envelope waits.
+  All-notes-off does not wait.
+- Both engines: `cal::NoteOffLatencySeconds` in the plugin, `Cal.NoteOffLatencySeconds` in
+  the Studio's. New conformance checks: the key is up at once, the level holds through the
+  latency and then falls, all-notes-off is immediate.
+
+One programme and one clip. A dedicated run - single notes, known gate lengths, the release
+start timed against the MIDI - should confirm the figure before it is called settled.
+
 ### A SYNTH tab: sounds with no disk, made as a disk
 
 The plugin can now make its own sounds, and it makes them the S950's way: every oscillator

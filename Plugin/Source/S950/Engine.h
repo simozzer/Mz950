@@ -310,7 +310,7 @@ namespace s950
         bool isDrumNote (int note, int velocity);
 
         /// Voice i let go, and forgotten as a glide's origin if it was cut off mid-glide.
-        void releaseVoice (int i);
+        void releaseVoice (int i, bool now = false);
         Voice& take (bool drum = false);
 
         double sampleRate = 48000.0;

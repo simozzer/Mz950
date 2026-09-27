@@ -385,6 +385,34 @@ namespace s950::cal
     inline constexpr double VcaReleaseDb = 42.5;
 
     /*
+     * HOW LONG AFTER A NOTE-OFF THE RELEASE BEGINS: 15 ms.
+     *
+     * Measured 2026-09-27 on DSKA0039 GRAND1, a house-piano clip of 368 notes at 120 bpm
+     * played through a real S950 and through this engine from the same MIDI, recorded clean
+     * (peak -6.8 dBFS, no flat runs). Replaying the MIDI offline matched the plugin half of
+     * the take to 0.76 dB rms, so the engine could be tested against the hardware half
+     * directly. With the level set on the stretches where keys are held:
+     *
+     *   - the release RATE matched already: 185 dB/s on the hardware, 188 in the engine;
+     *   - but in every gap after a note-off the hardware held 2.0 to 3.2 dB more tail;
+     *   - a slower release could not fix that - it left the early gaps short and pushed
+     *     the later ones over - while starting the release later fixed all six gaps at
+     *     once: at 15 ms they sit within +-0.3 dB of the hardware (one at +0.8), mean
+     *     +0.07 dB, from +2.47 dB with none.
+     *
+     * So the machine lets go 15 ms after it is told to: MIDI input polled, or the envelope
+     * stepped on a clock, or both. Note-ons carry no such lag relative to the recording
+     * (the take aligned at -1 ms), so this is the gap between the two.
+     *
+     * The KEY is up at once - glide's hand-over, mono and voice stealing all see that
+     * immediately; only the envelope waits. All-notes-off does not wait.
+     *
+     * One programme, one clip. A dedicated run - single notes, known gate lengths, the
+     * release start timed against the MIDI - should confirm it before it is called settled.
+     */
+    inline constexpr double NoteOffLatencySeconds = 0.015;
+
+    /*
      * WHERE A SUSTAIN OF ZERO ENDS UP: silence, not SustainDb down.
      *
      * The sustain plateau is a straight line in decibels from stored 99 down to stored 5,

@@ -47,7 +47,9 @@ namespace s950
     {
     public:
         bool isActive()  const { return stage != Stage::idle; }
-        bool isHeld()    const { return stage != Stage::idle && stage != Stage::release; }
+        /// The KEY is down. False from the note-off on, even while the envelope is still
+        /// waiting out cal::NoteOffLatencySeconds before it releases.
+        bool isHeld()    const { return stage != Stage::idle && stage != Stage::release && ! keyUp; }
         int  getNote()     const { return note; }
         int  getVelocity() const { return velocity; }
         long long getStartedAt() const { return startedAt; }
@@ -127,8 +129,15 @@ namespace s950
         /// The pitch wheel as a rate multiplier. Reaches a note already sounding, unlike velocity.
         void setBend (double ratio) { wheelBend = ratio; }
 
-        /// Let go of the key. The note falls at its own release rate.
+        /// Let go of the key. The note falls at its own release rate. Immediate: this is what
+        /// all-notes-off and the internals call. A note-off from a player goes via letGo().
         void release();
+
+        /*
+         * A note-off, as the machine takes one: the key is up now, and the release begins
+         * cal::NoteOffLatencySeconds later. See that constant for how it was measured.
+         */
+        void letGo();
 
         void kill() { stage = Stage::idle; }
 
@@ -396,6 +405,10 @@ namespace s950
 
         /// Handed over to a glide: the release is held to HandOverRelease. See handOver().
         bool handedOver = false;
+
+        /// The key has gone up; `pendingRelease` samples remain before the envelope releases.
+        bool keyUp = false;
+        int  pendingRelease = 0;
 
         /*
          * Wide: which half of a pair this is (0 for not one), its twin, and what the detune
