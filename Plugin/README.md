@@ -13,10 +13,9 @@ The installer puts the VST3 in the folder hosts scan and the standalone player i
 program group. If your DAW has already scanned its plugin folders, tell it to rescan;
 **Mz950** then appears under instruments.
 
-**Load a disk.** Press **Load disk…** and pick an `.hfe` or `.img`. The browser opens
-*inside* the plugin window rather than as a system dialog — a native chooser goes to the
-primary display, and a plugin opened on a second monitor would put its file browser where
-nobody is looking, which from the DAW is indistinguishable from a button that does nothing.
+**Load a disk.** Press **Load disk…** and pick an `.hfe` or `.img` (800K or 1600K HD) in
+the Windows file dialog. It belongs to the plugin window, so it opens on the same monitor as
+the plugin and stays on top of it, even when the host keeps plugin windows always on top.
 It starts beside the disk already open, or the folder a disk was last chosen from, or the
 sound library the installer left on the machine, whichever it finds first.
 

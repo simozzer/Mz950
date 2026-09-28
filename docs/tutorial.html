@@ -345,11 +345,10 @@ puts the VST3 where hosts look for it; if your DAW has already scanned, tell it 
 
 <h3>Loading a disk</h3>
 
-<p>Press <strong>Load disk…</strong> and pick an image. The browser opens <em>inside</em> the
-plugin window rather than as a system dialog — which is deliberate: a native dialog goes to
-the primary display, and a plugin opened on a second monitor would put its file browser
-somewhere nobody was looking, which from the DAW is indistinguishable from a button that does
-nothing.</p>
+<p>Press <strong>Load disk…</strong> and pick an image — an <code>.hfe</code> or
+<code>.img</code>, 800K or 1600K high density — in the Windows file dialog. It belongs to the
+plugin window, so it opens on the same monitor as the plugin and stays on top of it, even when
+your DAW keeps plugin windows always on top.</p>
 
 <p>It starts wherever you were last time: beside the disk this instance already has open, or
 the folder you last chose one from, or the sound library the installer put on your machine.</p>
