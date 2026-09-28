@@ -26,7 +26,116 @@ namespace s950
         double vcfAttack = 0.0, vcfDecay = 0.0, vcfSustain = 0.0, vcfRelease = 0.0;
         double lfoRate = 0.0, lfoDepth = 0.0, lfoDelay = 0.0;
         double velToFilter = 0.0, velToLoudness = 0.0;
+
+        /// 0..100, and not an offset: the S950's filter has no resonance for it to be offset
+        /// from. See Butterworth::setCutoff.
+        double resonance = 0.0;
+
+        /// The LFO's wave, an lfo::Shape as a number. Sine is the S950's; the rest are not.
+        double lfoShape = 0.0;
+
+        /// 0..99: how far the LFO moves the cutoff, up to lfo::FilterOctaves. Not the S950's -
+        /// its LFO reaches the pitch and nothing else.
+        double lfoToFilter = 0.0;
     };
+
+    namespace lfo
+    {
+        /*
+         * The LFO's shapes. The S950's LFO is a sine and nothing else; the other three are
+         * additions, and sine stays the default so a programme plays as the machine would.
+         */
+        enum Shape { sine = 0, saw, square, sampleHold, NumShapes };
+
+        /*
+         * The wave at a phase, -1..+1.
+         *
+         * Every shape starts where the sine does - at zero phase, heading up - so switching
+         * shape does not throw a held note to the far side of its pitch: the saw rises from
+         * the centre to the top, jumps to the bottom and rises back; the square sits high for
+         * the first half. S&H holds one random level a cycle, drawn from `seed` and `cycle`
+         * rather than a running generator, so every voice riding the programme's shared LFO
+         * lands on the same level at the same moment - which is what a shared LFO means.
+         */
+        inline double wave (int shape, double phase, unsigned seed, unsigned cycle)
+        {
+            const double pi = 3.14159265358979323846;
+
+            switch (shape)
+            {
+                case saw:        return phase < pi ? phase / pi : phase / pi - 2.0;
+                case square:     return phase < pi ? 1.0 : -1.0;
+                case sampleHold:
+                {
+                    // a 32-bit integer hash (Chris Wellons' "lowbias32") of seed and cycle
+                    unsigned h = seed ^ (cycle * 0x9E3779B9u);
+                    h ^= h >> 16; h *= 0x7FEB352Du;
+                    h ^= h >> 15; h *= 0x846CA68Bu;
+                    h ^= h >> 16;
+                    return h / 2147483647.5 - 1.0;
+                }
+                default:         return std::sin (phase);
+            }
+        }
+
+        /*
+         * THE PERFORM TAB'S LFO REACHES PAST THE MACHINE'S
+         *
+         * Each of these is the S950's own measured curve over the S950's own range, and an
+         * addition beyond it - so a programme with the trims at zero plays exactly as the
+         * disk has it, and turning a knob a little moves it exactly as the machine's panel
+         * would. Only past the machine's end does the Perform tab carry on.
+         */
+
+        /*
+         * Rate in hertz, for the programme's 0..99 plus the trim.
+         *
+         * 0..99 is measured: 1.785 Hz and 0.089 Hz a unit, up to 10.6. Below zero is not the
+         * S950's - its slowest is 1.785 Hz - and runs down exponentially to 0.1 Hz at -99, a
+         * ten-second sweep, which is where a slow filter sweep or a lazy S&H wants to be.
+         */
+        inline double rateHz (double units)
+        {
+            const double u = cal::clamp (units, -99.0, 99.0);
+            return u >= 0.0 ? cal::LfoRateHzAtZero + u * cal::LfoRateHzPerUnit
+                            : cal::LfoRateHzAtZero * std::pow (0.1 / cal::LfoRateHzAtZero, -u / 99.0);
+        }
+
+        /*
+         * Pitch depth in cents, from the keygroup's 0..99 and the trim's 0..99.
+         *
+         * The keygroup's is the machine's, 1.527 cents a unit. So is the trim's, as far as
+         * +50 (76 cents); past that it grows exponentially to a whole octave at +99, so S&H
+         * and square become pitch jumps you cannot miss. Below +50 the two add exactly as
+         * they always did, bar the old clamp at a combined 99.
+         */
+        inline double pitchCents (double diskUnits, double trimUnits)
+        {
+            const double t    = cal::clamp (trimUnits, 0.0, 99.0);
+            const double knee = 50.0 * cal::LfoDepthCentsPerUnit;
+            const double trim = t <= 50.0 ? t * cal::LfoDepthCentsPerUnit
+                                          : knee * std::pow (1200.0 / knee, (t - 50.0) / 49.0);
+
+            return cal::clamp (diskUnits, 0.0, 99.0) * cal::LfoDepthCentsPerUnit + trim;
+        }
+
+        /*
+         * How long the depth takes to fade in, for the programme's 0..99 plus the trim.
+         *
+         * 0..99 is measured (cal::LfoDelayFadeConstant): 83 ms at 0, seven and a half seconds
+         * at 99. Below zero is not the S950's, and shortens the fade in a straight line to
+         * nothing at -99 - so a trim can take a programme's slow fade-in away entirely.
+         */
+        inline double fadeSeconds (double units)
+        {
+            const double u = cal::clamp (units, -99.0, 99.0);
+            return u >= 0.0 ? cal::LfoDelayFadeConstant / std::max (1.0, 100.0 - u)
+                            : (cal::LfoDelayFadeConstant / 100.0) * (1.0 + u / 99.0);
+        }
+
+        /// How far the LFO takes the cutoff at the top of the To Filter knob, either way.
+        inline constexpr double FilterOctaves = 3.0;
+    }
 
     /*
      * One sounding note.
@@ -185,9 +294,9 @@ namespace s950
          * it set they ran at rates 3.5% apart and drifted a whole turn in the same six.
          */
         /// Mono, as it always was: full gain into one buffer.
-        void render (float* buffer, int count, double sharedPhase)
+        void render (float* buffer, int count, double sharedPhase, unsigned sharedCycle = 0)
         {
-            render (buffer, nullptr, count, sharedPhase);
+            render (buffer, nullptr, count, sharedPhase, sharedCycle);
         }
 
         /*
@@ -197,7 +306,11 @@ namespace s950
          * gains are ignored and the sample goes into `left` at full level. Only a caller with
          * two channels pays for the second write.
          */
-        void render (float* left, float* right, int count, double sharedPhase);
+        void render (float* left, float* right, int count, double sharedPhase,
+                     unsigned sharedCycle = 0);
+
+        /// The seed S&H draws from on the shared LFO, the same for every voice.
+        static constexpr unsigned SharedLfoSeed = 0x5EEDu;
 
     private:
         /// How often the modulators are recomputed. 32 at 48 kHz is 0.67 ms.
@@ -378,6 +491,12 @@ namespace s950
 
         // the LFO
         double lfoCents = 0.0, lfoPhase = 0.0, lfoStep = 0.0;
+
+        /// Whole cycles of this voice's own LFO so far, and its own S&H seed - see lfo::wave.
+        unsigned lfoCycle = 0, lfoSeed = 0;
+
+        /// The LFO this block, faded in, -1..+1; and how many octaves of cutoff that is worth.
+        double lfoNow = 0.0, lfoFilterOctaves = 0.0;
         double fadeSeconds = 0.0, fadeT = 0.0;
 
         /// Seconds since the key went down. Warp's bend is measured from there, and `t` cannot

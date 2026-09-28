@@ -80,13 +80,16 @@ namespace s950
         vcfReleaseT   = 0.0;
 
         filter.reset();
-        filter.setCutoff (cutoffNow(), sampleRate);
+        filter.setCutoff (cutoffNow(), sampleRate, trims.resonance / 100.0);
 
         // --- the LFO. Phase and fade start here; rate, depth and delay come from applyLfo,
         // which the trims can move while the note sounds.
         wheelCents = wheel;
         ownLfo     = group.lfoDesync;
         lfoPhase   = 0.0;
+        lfoCycle   = 0;
+        lfoNow     = 0.0;
+        lfoSeed    = static_cast<unsigned> (sequence) * 2654435761u;    // each note its own S&H
         fadeT      = 0.0;
         sinceOn    = 0.0;
 
@@ -262,14 +265,14 @@ namespace s950
      */
     void Voice::applyLfo()
     {
-        const double rate  = cal::clamp (kg->lfoRate  + trims.lfoRate,  0.0, 99.0);
-        const double depth = cal::clamp (kg->lfoDepth + trims.lfoDepth, 0.0, 99.0);
-        const double delay = cal::clamp (kg->lfoDelay + trims.lfoDelay, 0.0, 99.0);
-
-        lfoCents    = depth * cal::LfoDepthCentsPerUnit + wheelCents;
+        // The machine's curves over the machine's range, and the Perform tab's reach past
+        // them - see the lfo namespace in Voice.h.
+        lfoCents    = lfo::pitchCents (kg->lfoDepth, trims.lfoDepth) + wheelCents;
         lfoStep     = 2.0 * 3.14159265358979323846
-                      * (cal::LfoRateHzAtZero + rate * cal::LfoRateHzPerUnit) / sampleRate;
-        fadeSeconds = cal::LfoDelayFadeConstant / std::max (1.0, 100.0 - delay);
+                      * lfo::rateHz (kg->lfoRate + trims.lfoRate) / sampleRate;
+        fadeSeconds = lfo::fadeSeconds (kg->lfoDelay + trims.lfoDelay);
+
+        lfoFilterOctaves = cal::clamp (trims.lfoToFilter, 0.0, 99.0) / 99.0 * lfo::FilterOctaves;
     }
 
     void Voice::letGo()
@@ -370,7 +373,8 @@ namespace s950
         wideGainR = std::sin (theta);
     }
 
-    void Voice::render (float* left, float* right, int count, double sharedPhase)
+    void Voice::render (float* left, float* right, int count, double sharedPhase,
+                        unsigned sharedCycle)
     {
         if (stage == Stage::idle)
             return;
@@ -405,14 +409,19 @@ namespace s950
             // --- the modulators, once per block. The envelopes are rebuilt from the trims
             // first, so a control moved under a held note is heard on that note.
             applyTrims();
-            filter.setCutoff (cutoffNow(), sampleRate);
 
+            // The LFO before the filter, because To Filter lets it move the cutoff too.
             const double fade = fadeSeconds > 0.0005
                               ? (fadeT >= fadeSeconds ? 1.0 : fadeT / fadeSeconds) : 1.0;
             const double cents = lfoCents * fade;
-            const double phase = ownLfo ? lfoPhase : sharedPhase;
+            const int    shape = static_cast<int> (std::lround (trims.lfoShape));
+            const double wave  = ownLfo ? lfo::wave (shape, lfoPhase, lfoSeed, lfoCycle)
+                                        : lfo::wave (shape, sharedPhase, SharedLfoSeed, sharedCycle);
             const double bend  = cents == 0.0 ? 1.0
-                               : std::pow (2.0, cents * std::sin (phase) / 1200.0);
+                               : std::pow (2.0, cents * wave / 1200.0);
+
+            lfoNow = wave * fade;
+            filter.setCutoff (cutoffNow(), sampleRate, trims.resonance / 100.0);
             /*
              * WARP rides on top of the LFO, both as multipliers on the playback rate.
              *
@@ -532,7 +541,10 @@ namespace s950
 
             lfoPhase += lfoStep * n;
             if (lfoPhase > 2.0 * 3.14159265358979323846)
+            {
                 lfoPhase -= 2.0 * 3.14159265358979323846;
+                ++lfoCycle;
+            }
 
             advanceStage();
             done += n;
@@ -592,7 +604,8 @@ namespace s950
         const double depth =
             (cal::clamp (baseAmount + trims.amount, -50.0, 50.0) / 50.0) * cal::EnvOctaves;
 
-        const double hz = base * std::pow (2.0, cutoffShift + env * depth);
+        // The LFO last, if To Filter asks for it: not the S950's, and nothing at zero.
+        const double hz = base * std::pow (2.0, cutoffShift + env * depth + lfoNow * lfoFilterOctaves);
         return hz > ceiling ? ceiling : (hz < floorHz ? floorHz : hz);
     }
 

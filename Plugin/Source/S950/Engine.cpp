@@ -52,20 +52,23 @@ namespace s950
         // The shared LFO runs at the rate the programme's keygroups ask for. They almost
         // always agree; where they do not, the first one wins, since one shared oscillator
         // cannot be at two rates at once.
-        double step = 0.0;
+        //
+        // Kept as the panel's 0..99 rather than as a step, because the Rate trim goes on top
+        // of it every stretch - see renderSpan. Worked out once here, it used to leave the
+        // Rate knob doing nothing at all to any keygroup riding the shared LFO.
+        double rate = -1.0;             // no keygroup rides it
         if (patch != nullptr)
         {
             for (const auto& k : patch->keygroups)
             {
                 if (k.lfoDesync) continue;
 
-                step = 2.0 * 3.14159265358979323846
-                       * (cal::LfoRateHzAtZero + k.lfoRate * cal::LfoRateHzPerUnit) / sampleRate;
+                rate = k.lfoRate;
                 break;
             }
         }
 
-        sharedStep = step;              // read only by the audio thread; a double write is atomic enough here
+        sharedRate = rate;              // read only by the audio thread; a double write is atomic enough here
         pending    = patch;             // a copy: the caller keeps its own reference
         pendingReady.store (true, std::memory_order_release);
         return true;
@@ -631,14 +634,21 @@ namespace s950
                 v.setTrims (now);
                 v.setBend (bendNow);
                 v.setWide (cents, spread);
-                v.render (left, right, count, sharedPhase);
+                v.render (left, right, count, sharedPhase, sharedCycle);
             }
 
         // The shared LFO moves with the audio, so it advances per stretch rather than
-        // once per block - otherwise splitting a block would change how it sounds.
+        // once per block - otherwise splitting a block would change how it sounds. The
+        // whole cycles are counted too: they are what S&H draws a new level on.
+        const double sharedStep = sharedRate < 0.0 ? 0.0
+            : 2.0 * 3.14159265358979323846 * lfo::rateHz (sharedRate + now.lfoRate) / sampleRate;
+
         sharedPhase += sharedStep * count;
-        if (sharedPhase > 2.0 * 3.14159265358979323846)
-            sharedPhase = std::fmod (sharedPhase, 2.0 * 3.14159265358979323846);
+        while (sharedPhase > 2.0 * 3.14159265358979323846)
+        {
+            sharedPhase -= 2.0 * 3.14159265358979323846;
+            ++sharedCycle;
+        }
     }
 
     /*

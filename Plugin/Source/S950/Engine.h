@@ -51,6 +51,8 @@ namespace s950
                                vcfSustain { 0.0f }, vcfRelease { 0.0f };
             std::atomic<float> lfoRate { 0.0f }, lfoDepth { 0.0f }, lfoDelay { 0.0f };
             std::atomic<float> velToFilter { 0.0f }, velToLoudness { 0.0f };
+            std::atomic<float> resonance { 0.0f };
+            std::atomic<float> lfoShape { 0.0f }, lfoToFilter { 0.0f };
 
             /// One reading of the lot, for a stretch of audio to be rendered against.
             Trims read() const
@@ -71,6 +73,9 @@ namespace s950
                 t.lfoDelay   = lfoDelay.load (std::memory_order_relaxed);
                 t.velToFilter   = velToFilter.load (std::memory_order_relaxed);
                 t.velToLoudness = velToLoudness.load (std::memory_order_relaxed);
+                t.resonance     = resonance.load (std::memory_order_relaxed);
+                t.lfoShape      = lfoShape.load (std::memory_order_relaxed);
+                t.lfoToFilter   = lfoToFilter.load (std::memory_order_relaxed);
                 return t;
             }
         };
@@ -337,7 +342,9 @@ namespace s950
         std::atomic<bool> retiredReady { false };
 
         long long sequence = 0;
-        double    sharedPhase = 0.0, sharedStep = 0.0;
+        double    sharedPhase = 0.0;
+        double    sharedRate  = -1.0;   // the shared LFO's rate on the panel's 0..99, or -1 for none
+        unsigned  sharedCycle = 0;
         int       wheel = 0;
         int       pressure = 0;          // channel aftertouch, at rest at nothing
         int       bend14 = 8192;         // the pitch wheel, at rest in the middle

@@ -206,8 +206,8 @@ private:
      * Look.h gives those two kinds - with the controller numbers in each panel's corner,
      * where somebody mapping a keyboard would look for them.
      */
-    look::Panel filterPanel   { "FILTER",   look::perform, "offset  -  CC 74" };
-    look::Panel lfoPanel      { "LFO",      look::perform, "offsets  -  CC 76 77 78" };
+    look::Panel filterPanel   { "FILTER",   look::perform, "CC 74, 71" };
+    look::Panel lfoPanel      { "LFO",      look::perform, "CC 113, 76 78 77 114" };
     look::Panel velocityPanel { "VELOCITY", look::perform, "offsets  -  CC 109 112" };
     look::Panel vcaPanel      { "VCA ENVELOPE", look::perform, "offsets  -  CC 73 75 79 72" };
     look::Panel vcfPanel      { "VCF ENVELOPE", look::perform, "offsets  -  CC 102-105, 70" };
@@ -248,6 +248,11 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> wideAttachment, offsetAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> wideDetuneAttachment,
                                                                           wideSpreadAttachment;
+    /// The LFO's shape: a performance setting like Res, never written to the disk.
+    juce::ComboBox lfoShape;
+    juce::Label    lfoShapeLabel;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> lfoShapeAttachment;
+
     juce::Label  patchLabel;
     juce::Label  voicesLabel;
 

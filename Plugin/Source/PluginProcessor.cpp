@@ -165,25 +165,42 @@ VirtualS950Processor::describeParameters()
      * twentieth of a second, and at 99 it climbs for seven and a half. Turning it up on a
      * held note does not restart anything, because the fade keeps its place.
      *
-     * THESE THREE ONLY GO UP, 0 TO 99, WHERE THE OTHERS GO BOTH WAYS
+     * DEPTH ONLY GOES UP; RATE AND DELAY GO BOTH WAYS, AND ALL THREE REACH PAST THE MACHINE
      *
-     * The envelope and filter trims are symmetric because a programme always has an envelope
-     * and always has a cutoff, so there is something to move in either direction. The LFO is
-     * different: almost every programme in the library leaves it switched off, at a rate of
-     * 0 and a depth of 0. A symmetric knob on those spends its whole lower half asking for
-     * less than nothing, and the result clamps at 0 and does not move - half a control doing
-     * nothing at all, which is exactly how it felt.
+     * Almost every programme in the library leaves the LFO off, at a depth of 0, so a
+     * symmetric depth knob would spend its lower half asking for less than nothing. Depth
+     * runs 0..99 and adds.
      *
-     * So they run 0..99 and add. Zero still means "as the disk has it", every knob here still
-     * reads zero until it is touched, and a continuous controller now spreads its 128 steps
-     * across the useful range instead of half of them over a dead zone.
+     * Rate and delay once did the same, and it made the LFO hard to hear. A rate that only
+     * adds cannot go slower than the S950's slowest, 1.8 Hz; a delay that only adds cannot
+     * take away a programme's slow fade-in, so short notes never got any vibrato at all.
+     * They are -99..+99 now, and below the machine's own range they carry on: rate down to
+     * 0.1 Hz, delay down to no fade at all. Depth likewise carries on past +50 to a whole
+     * octave. See the lfo namespace in Voice.h - each is the machine's curve over the
+     * machine's range and an addition past it.
      *
-     * What this gives up is turning DOWN a programme that already has vibrato dialled in.
-     * That is rare enough to be worth the trade, and reaching for it is a keygroup edit.
+     * The parameter IDs stay, so a session saved with these at 0..99 plays as it did - bar
+     * a depth past +50, which is now deeper, as it was meant to be.
      */
-    addRange ("lfoRate",  "LFO Rate",  0.0f, 99.0f);
-    addRange ("lfoDepth", "LFO Depth", 0.0f, 99.0f);
-    addRange ("lfoDelay", "LFO Delay", 0.0f, 99.0f);
+    addTrim  ("lfoRate",  "LFO Rate",  99.0f);
+    addRange ("lfoDepth", "LFO Pitch Depth", 0.0f, 99.0f);     // named for what it moves; the ID stays
+    addTrim  ("lfoDelay", "LFO Delay", 99.0f);
+
+    /*
+     * The LFO to the filter, 0..99 for up to three octaves either way. Not the S950's: its
+     * LFO reaches the pitch and nothing else. It shares the LFO's rate, shape and delay, and
+     * its depth is its own, so the pitch can stay still while the filter moves.
+     */
+    addRange ("lfoToFilter", "LFO Filter Depth", 0.0f, 99.0f);
+
+    /*
+     * The LFO's shape - sine being the S950's, and the default; the other three are
+     * additions. Absolute, not an offset: there is nothing on the disk to offset it from.
+     * Its raw value is the choice's index, which is what the engine's trims carry.
+     */
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { "lfoShape", 1 }, "LFO Shape",
+        juce::StringArray { "Sine", "Saw", "Square", "S&H" }, 0));
 
     /*
      * How hard you play, and what it reaches: the filter's frequency and the loudness.
@@ -200,6 +217,22 @@ VirtualS950Processor::describeParameters()
      */
     addRange ("velToFilter",   "Vel Freq",     0.0f, 99.0f);
     addRange ("velToLoudness", "Vel Loudness", 0.0f, 99.0f);
+
+    /*
+     * Resonance - another control the S950 never had: its filter is a plain Butterworth
+     * with no peak at all. See Butterworth::setCutoff.
+     *
+     * Absolute, 0..100 percent, and off by default, so a programme plays as the disk has
+     * it until somebody turns it up. A row in trimControls all the same, because it lands
+     * in the engine's trims and every voice reads it each block, so it moves held notes.
+     */
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "resonance", 1 },
+        "VCF Resonance",
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.0f),
+        0.0f,
+        juce::AudioParameterFloatAttributes().withStringFromValueFunction (
+            [] (float v, int) { return juce::String (juce::roundToInt (v)) + "%"; })));
 
     /*
      * Portamento - the one control here the S950 never had. See Engine::glide.
@@ -386,6 +419,15 @@ VirtualS950Processor::VirtualS950Processor()
     // numbers for it, the same reason 102-105 were taken for the filter envelope.
     trimControls[13] = { 109, "velToFilter",   &AT::velToFilter   };
     trimControls[14] = { 112, "velToLoudness", &AT::velToLoudness };
+
+    // 71 is General MIDI's "harmonic content", which is what every synth maps resonance to.
+    trimControls[15] = { 71, "resonance", &AT::resonance };
+
+    // 113, undefined in General MIDI, for the LFO's shape: four equal bands of 32.
+    trimControls[16] = { 113, "lfoShape", &AT::lfoShape };
+
+    // 114, undefined, for how far the LFO moves the filter.
+    trimControls[17] = { 114, "lfoToFilter", &AT::lfoToFilter };
 
     for (auto& t : trimControls)
     {

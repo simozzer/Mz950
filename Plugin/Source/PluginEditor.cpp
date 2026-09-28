@@ -515,19 +515,29 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
          * control, which it is not.
          */
         { "vcfCutoff",  "Filter",  "SAMPLE", 74 },
+
+        // Beside Filter because it acts where Filter sets the cutoff. Violet, not cyan: it
+        // is an addition rather than an offset, and says so in its tooltip.
+        { "resonance",  "Res",     "SAMPLE", 71 },
+
         { "vcfAmount",  "Amnt",    "VCF",    70 },
 
         /*
-         * The LFO, in its own row.
+         * The LFO, in its own row, after its Shape box.
          *
-         * Three knobs rather than a shape, because there is no shape to draw: it is a sine
-         * at a rate, at a depth, fading in over a delay. Rate is linear in hertz where every
-         * other time on this panel is exponential, so the knob deliberately feels different
-         * under the hand - a unit is 0.089 Hz wherever you are on it.
+         * Knobs rather than a drawing: it is a wave at a rate, at a depth, fading in over a
+         * delay. Rate is linear in hertz over the machine's range, where every other time on
+         * this panel is exponential, so the knob deliberately feels different under the hand.
+         * Each reaches past the S950 at its far end - see the lfo namespace in Voice.h - and
+         * To Filter is an addition outright, so it wears the violet.
          */
-        { "lfoRate",    "Rate",    "LFO",    76 },
-        { "lfoDepth",   "Depth",   "LFO",    77 },
-        { "lfoDelay",   "Delay",   "LFO",    78 },
+        //
+        // The two depths side by side at the end, named for what they move: "Depth" alone
+        // read as the only depth there was, and To Filter as something else entirely.
+        { "lfoRate",     "Rate",    "LFO",    76 },
+        { "lfoDelay",    "Delay",   "LFO",    78 },
+        { "lfoDepth",    "Pitch",   "LFO",    77 },
+        { "lfoToFilter", "Filter",  "LFO",    114 },
 
         /*
          * How hard you play, and what it reaches.
@@ -548,14 +558,33 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
         k.slider = std::make_unique<juce::Slider> (juce::Slider::RotaryHorizontalVerticalDrag,
                                                    juce::Slider::TextBoxBelow);
 
-        const juce::String tip =
-            juce::String (w.group) + " " + w.name +
+        const juce::String id (w.id);
+        const bool addition = id == "resonance" || id == "lfoToFilter";
+
+        // What each LFO knob does past the S950's own range, said where the hand is.
+        const juce::String lfoNote =
+              id == "lfoRate"  ? " Both ways: below the machine's slowest (1.8 Hz) it carries on"
+                                 " down to 0.1 Hz, a ten-second sweep."
+            : id == "lfoDepth" ? " Adds only. The S950's scale to +50 (76 cents); past that it"
+                                 " grows to a whole octave at +99, which is not the machine's."
+            : id == "lfoDelay" ? " Both ways: below zero it shortens the programme's fade-in,"
+                                 " to none at all at -99, so short notes get the LFO too."
+            : juce::String();
+
+        const juce::String tip = id == "resonance"
+          ? juce::String ("Filter resonance: a peak at the cutoff, and past about 92% the filter "
+                          "sings on its own - a sine at the cutoff, following Filter, the envelope "
+                          "and velocity. An addition - the S950's filter has no resonance, so 0 "
+                          "plays the programme exactly as the machine would. MIDI CC 71.")
+          : id == "lfoToFilter"
+          ? juce::String ("LFO filter depth: moves the cutoff with the LFO's rate, shape and "
+                          "delay, up to three octaves either way. Square or S&H here is the "
+                          "classic stepped filter. An addition - the S950's LFO reaches only the "
+                          "pitch - and independent of Pitch. MIDI CC 114.")
+          : juce::String (w.group) + " " + w.name +
             ", offset from what the disk says, across every keygroup in the programme. "
             "Zero plays it as written. MIDI CC " + juce::String (w.cc) + "."
-            + (juce::String (w.group) == "LFO"
-                 ? juce::String (" Adds only: nearly every programme leaves the LFO switched"
-                                 " off, so below zero there is nothing to take away.")
-                 : juce::String())
+            + lfoNote
             + (juce::String (w.group) == "VELOCITY"
                  ? juce::String (" Adds only. Loudness reaches the next note you play rather"
                                  " than one already sounding, because how hard a key was"
@@ -564,9 +593,12 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
 
         k.slider->setDoubleClickReturnValue (true, 0.0);
         k.slider->setTooltip (tip);
-        k.slider->setTitle (juce::String (w.group) + " " + w.name + " offset");
+        k.slider->setTitle (id == "resonance"   ? juce::String ("Filter resonance")
+                          : id == "lfoToFilter" ? juce::String ("LFO filter depth")
+                          : juce::String (w.group) + " " + w.name + " offset");
         k.slider->setTextBoxStyle (juce::Slider::TextBoxBelow, false, 46, 14);
-        look::accent (*k.slider, look::perform);           // cyan: an offset
+        look::accent (*k.slider, addition ? look::extra      // violet: not the machine's
+                                          : look::perform);  // cyan: an offset
         addAndMakeVisible (*k.slider);
 
         k.label = std::make_unique<juce::Label>();
@@ -580,6 +612,24 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
 
         knobs.push_back (std::move (k));
     }
+
+    /*
+     * The LFO's shape. A box rather than a knob, being four names rather than a value, and
+     * outlined violet like the other additions - only Sine is the S950's own.
+     */
+    lfoShape.addItemList ({ "Sine", "Saw", "Square", "S&H" }, 1);
+    lfoShape.setTooltip ("LFO shape. Sine is the S950's own LFO; saw, square and sample & hold "
+                         "are additions. S&H steps to a new random pitch every cycle, at Rate. "
+                         "A performance setting, never written to the disk. MIDI CC 113.");
+    lfoShape.setTitle ("LFO shape");
+    lfoShape.setColour (juce::ComboBox::outlineColourId, look::extra);
+    addAndMakeVisible (lfoShape);
+    lfoShapeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
+        processor.parameters, "lfoShape", lfoShape);
+
+    lfoShapeLabel.setText ("Shape", juce::dontSendNotification);
+    look::styleCaption (lfoShapeLabel);
+    addAndMakeVisible (lfoShapeLabel);
 
     // Glide. Not a machine feature, and its panel's note is where that gets said once.
     const juce::String glideTip =
@@ -913,7 +963,8 @@ std::vector<juce::Component*> VirtualS950Editor::performParts()
         &glideButton, &glideTime, &glideTimeLabel,
         &voiceCount, &voiceCountLabel,
         &wideButton, &offsetButton, &wideDetune, &wideDetuneLabel,
-        &wideSpread, &wideSpreadLabel };
+        &wideSpread, &wideSpreadLabel,
+        &lfoShape, &lfoShapeLabel };
 
     for (auto& k : knobs)
     {
@@ -1181,7 +1232,7 @@ void VirtualS950Editor::resized()
 
     /*
      * Every row splits at the same centre gutter, so the panels line up down the page:
-     * FILTER and VELOCITY (one knob and two) on the left, the LFO's three on the right;
+     * FILTER and VELOCITY (two knobs each) on the left, the LFO's three on the right;
      * glide beside wide; the two envelopes. Before, row 1 split in sixths and the others in
      * half, and no edge lined up with any other.
      */
@@ -1192,14 +1243,26 @@ void VirtualS950Editor::resized()
     {
         auto left = row1.removeFromLeft (half);
         row1.removeFromLeft (gap);
-        filterPanel.setBounds (left.removeFromLeft ((left.getWidth() - gap) / 3));
+        filterPanel.setBounds (left.removeFromLeft ((left.getWidth() - gap) / 2));
         left.removeFromLeft (gap);
         velocityPanel.setBounds (left);
         lfoPanel.setBounds (row1);
     }
 
     placeGroup (filterPanel,   "SAMPLE");
-    placeGroup (lfoPanel,      "LFO");
+    // The LFO's shape, wide enough to read "Square", then its four knobs in even cells.
+    {
+        auto area = lfoPanel.content();
+        auto cell = area.removeFromLeft (80);
+        lfoShapeLabel.setBounds (cell.removeFromBottom (13));
+        lfoShape.setBounds (cell.withSizeKeepingCentre (76, 24));
+
+        const auto cells = cellsAcross (area, 4);
+        int i = 0;
+        for (auto& k : knobs)
+            if (juce::String (k.group) == "LFO")
+                placeKnob (cells[(size_t) i++], *k.slider, *k.label);
+    }
     placeGroup (velocityPanel, "VELOCITY");
 
     // --- row 2: the extras, violet, and told apart from the row above by it

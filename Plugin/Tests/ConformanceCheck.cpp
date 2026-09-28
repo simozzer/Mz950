@@ -518,6 +518,118 @@ namespace
         }
     }
 
+    void checkResonance();
+
+    /*
+     * The LFO's shapes. Sine is the S950's and is what every other check here runs with;
+     * the other three are additions, checked for what they are rather than against the C#.
+     */
+    void checkLfoShapes()
+    {
+        std::printf ("\n  the LFO's shapes\n");
+
+        using namespace s950::lfo;
+        const double pi = 3.14159265358979323846;
+
+        same ("sine is the S950's",            wave (sine, pi / 2, 0, 0), 1.0);
+        same ("every shape starts at the centre, saw", wave (saw, 0.0, 0, 0), 0.0);
+        same ("saw rises to the top at half a cycle",  wave (saw, pi - 1e-12, 0, 0), 1.0, 1e-9);
+        same ("  jumps to the bottom",                 wave (saw, pi, 0, 0), -1.0);
+        same ("  and rises back to the centre",        wave (saw, 2 * pi - 1e-12, 0, 0), 0.0, 1e-9);
+        same ("square is high for the first half",     wave (square, 1.0, 0, 0), 1.0);
+        same ("  and low for the second",              wave (square, 4.0, 0, 0), -1.0);
+
+        // S&H: held across a cycle, new every cycle, spread across the whole range
+        same ("S&H holds its level through a cycle",
+              wave (sampleHold, 0.1, 7, 3), wave (sampleHold, 6.2, 7, 3));
+
+        int changed = 0;
+        double lo = 1.0, hi = -1.0, sum = 0.0;
+        for (unsigned c = 0; c < 10000; ++c)
+        {
+            const double v = wave (sampleHold, 0.0, 7, c);
+            if (v != wave (sampleHold, 0.0, 7, c + 1)) ++changed;
+            lo = std::min (lo, v); hi = std::max (hi, v); sum += v;
+        }
+        check (changed == 10000, "S&H draws a new level every cycle", changed, 10000);
+        check (lo >= -1.0 && hi <= 1.0 && lo < -0.99 && hi > 0.99, "  across the whole of -1..+1", lo, hi);
+        same ("  centred on the note", sum / 10000.0, 0.0, 0.02);
+        check (wave (sampleHold, 0.0, 7, 5) != wave (sampleHold, 0.0, 8, 5),
+               "  and two notes' own LFOs do not step together", 0.0, 0.0);
+
+        /*
+         * The Perform tab's reach past the machine: the S950's curve over the S950's range,
+         * and an addition beyond it.
+         */
+        std::printf ("\n  the Perform tab's LFO range\n");
+
+        same ("rate at 0 is the S950's slowest",     rateHz (0.0), s950::cal::LfoRateHzAtZero);
+        same ("rate at 99 is the S950's fastest",    rateHz (99.0),
+              s950::cal::LfoRateHzAtZero + 99.0 * s950::cal::LfoRateHzPerUnit);
+        same ("  and below zero it slows to 0.1 Hz", rateHz (-99.0), 0.1, 1e-9);
+        check (rateHz (-30.0) < rateHz (0.0) && rateHz (-60.0) < rateHz (-30.0),
+               "  steadily", rateHz (-30.0), rateHz (-60.0));
+
+        same ("depth on the disk is the S950's",     pitchCents (40.0, 0.0), 40.0 * s950::cal::LfoDepthCentsPerUnit);
+        same ("  and the trim to +50 adds the same", pitchCents (20.0, 30.0), 50.0 * s950::cal::LfoDepthCentsPerUnit);
+        same ("  then grows to an octave at +99",    pitchCents (0.0, 99.0), 1200.0, 1e-9);
+        check (pitchCents (0.0, 75.0) > pitchCents (0.0, 50.0) && pitchCents (0.0, 75.0) < 1200.0,
+               "  steadily", pitchCents (0.0, 75.0), 0.0);
+
+        same ("delay at 0 is the S950's 83 ms",      fadeSeconds (0.0), s950::cal::LfoDelayFadeConstant / 100.0);
+        same ("delay at 99 is its seven seconds",    fadeSeconds (99.0), s950::cal::LfoDelayFadeConstant);
+        same ("  and at -99 there is no fade at all", fadeSeconds (-99.0), 0.0);
+
+        /*
+         * To Filter, heard: a saw through a half-closed filter, the LFO's pitch depth at
+         * zero. At zero To Filter it must be the plain note to the sample; turned up the
+         * cutoff swings and the note's brightness with it.
+         */
+        auto patch = std::make_shared<s950::Patch>();
+        {
+            s950::KeygroupPatch kg;
+            kg.lowKey = 0; kg.highKey = 127; kg.keygroupIndex = 0;
+            kg.sound = makeSaw (48000, 48000);
+            kg.vcaAttack = 0; kg.vcaDecay = 0; kg.vcaSustain = 99; kg.vcaRelease = 0;
+            kg.zoneFilter = 45;
+            kg.lfoRate = 60; kg.lfoDepth = 0; kg.lfoDelay = 0; kg.lfoDesync = true;
+            patch->keygroups.push_back (kg);
+        }
+
+        auto render = [&] (double toFilter)
+        {
+            s950::Engine engine (48000.0);
+            engine.setPatch (patch);
+            engine.trims.lfoToFilter.store (static_cast<float> (toFilter));
+            engine.trims.lfoShape.store (static_cast<float> (square));
+
+            std::vector<float> buffer (24000);
+            engine.noteOn (60, 100);
+            for (int at = 0; at < 24000; at += 240)
+                engine.render (buffer.data() + at, 240);
+            return buffer;
+        };
+
+        // The note's level in 20 ms windows, which a filter swinging on a square wave makes
+        // jump between two values.
+        auto swing = [] (const std::vector<float>& b)
+        {
+            double lo = 1e9, hi = 0.0;
+            for (size_t s = 4800; s + 960 <= b.size(); s += 960)
+            {
+                double e = 0.0;
+                for (size_t i = s; i < s + 960; ++i) e += b[i] * b[i];
+                e = std::sqrt (e / 960.0);
+                lo = std::min (lo, e); hi = std::max (hi, e);
+            }
+            return hi / lo;
+        };
+
+        const auto flat = render (0.0), moving = render (99.0);
+        check (swing (flat) < 1.05, "To Filter at zero leaves the filter still", swing (flat), 1.05);
+        check (swing (moving) > 1.5, "  and turned up, the LFO swings the cutoff", swing (moving), 1.5);
+    }
+
     void checkFilter()
     {
         std::printf ("\n  the filter\n");
@@ -546,6 +658,161 @@ namespace
         }
 
         check (peak < 0.02, "8 kHz is stopped by a 500 Hz cutoff", peak, 0.02);
+
+        checkResonance();
+    }
+
+    /*
+     * Resonance, which the machine has none of - up to and past self-oscillation.
+     *
+     * At zero it must be the S950's filter, since every other check here holds the engine
+     * to that. Below the threshold it must peak at the cutoff and then die away; past it, it
+     * must sing on its own, at the cutoff, at a steady level, and never run away however hot
+     * the input.
+     */
+    void checkResonance()
+    {
+        std::printf ("\n  filter resonance\n");
+
+        const double pi = 3.14159265358979323846;
+
+        // The filter as it was before resonance: three RBJ biquads, the S950's.
+        struct Rbj
+        {
+            double b0[3], b1[3], a1[3], a2[3], x1[3] {}, x2[3] {}, y1[3] {}, y2[3] {};
+
+            Rbj (double fc, double fs)
+            {
+                const double w = 2.0 * 3.14159265358979323846 * fc / fs, cw = std::cos (w), sw = std::sin (w);
+                for (int s = 0; s < 3; ++s)
+                {
+                    const double q  = 1.0 / (2.0 * std::cos (3.14159265358979323846 * (2 * s + 1) / 12.0));
+                    const double al = sw / (2.0 * q), a0 = 1.0 + al;
+                    b0[s] = (1.0 - cw) / 2.0 / a0; b1[s] = (1.0 - cw) / a0;
+                    a1[s] = -2.0 * cw / a0;        a2[s] = (1.0 - al) / a0;
+                }
+            }
+
+            double process (double x)
+            {
+                for (int s = 0; s < 3; ++s)
+                {
+                    const double y = b0[s] * x + b1[s] * x1[s] + b0[s] * x2[s] - a1[s] * y1[s] - a2[s] * y2[s];
+                    x2[s] = x1[s]; x1[s] = x; y2[s] = y1[s]; y1[s] = y; x = y;
+                }
+                return x;
+            }
+        };
+
+        for (double fc : { 200.0, 3000.0, 16311.0 })
+        {
+            Rbj old (fc, 48000.0);
+            s950::Butterworth now;
+            now.setCutoff (fc, 48000.0, 0.0);
+
+            double worst = 0.0;
+            for (int i = 0; i < 48000; ++i)
+            {
+                const double x = ((i * 7919) % 2000) / 1000.0 - 1.0;
+                worst = std::max (worst, std::fabs (old.process (x) - now.process (x)));
+            }
+            check (worst < 1e-12, "resonance 0 is the S950's filter", worst, 1e-12);
+        }
+
+        // Gain for a quiet sine, well inside the level control's linear range.
+        auto gainAt = [pi] (double hz, double resonance)
+        {
+            s950::Butterworth f;
+            f.setCutoff (1000.0, 48000.0, resonance);
+
+            double top = 0.0;
+            for (int i = 0; i < 96000; ++i)
+            {
+                const double out = f.process (0.01 * std::sin (2.0 * pi * hz * i / 48000.0));
+                if (i > 72000) top = std::max (top, std::fabs (out));
+            }
+            return top / 0.01;
+        };
+
+        same ("Butterworth is -3 dB at the cutoff", gainAt (1000.0, 0.0), std::sqrt (0.5), 0.01);
+
+        const double half = gainAt (1000.0, 0.5), most = gainAt (1000.0, 0.9);
+        check (half > 2.0, "half resonance peaks at the cutoff", half, 2.0);
+        check (most > 4.0 && most > half, "resonance rises with the knob", most, half);
+        check (gainAt (8000.0, 0.9) < 0.02, "and the slope is still 36 dB an octave", gainAt (8000.0, 0.9), 0.02);
+
+        const double starts = s950::Butterworth::oscillationStarts();
+        check (starts > 0.85 && starts < 0.97, "self-oscillation starts near the top of the knob", starts, 0.92);
+
+        /*
+         * Strike it once, then nothing, and see what is left three seconds on. Below the
+         * threshold, nothing; at the top, a sine at the cutoff at the level it was set to.
+         */
+        struct Tail { double level, pitch; };
+
+        auto ringOut = [] (double fc, double fs, double resonance)
+        {
+            s950::Butterworth f;
+            f.setCutoff (fc, fs, resonance);
+
+            const int n = (int) (fs * 3.0), from = n - (int) (fs * 0.5);
+            double level = 0.0, prev = 0.0, first = -1.0, last = -1.0;
+            int crossings = 0;
+
+            for (int i = 0; i < n; ++i)
+            {
+                const double y = f.process (i == 0 ? 0.5 : 0.0);
+                if (i >= from)
+                {
+                    level = std::max (level, std::fabs (y));
+                    if (prev < 0.0 && y >= 0.0)
+                    {
+                        const double t = (i - 1) + prev / (prev - y);
+                        if (first < 0.0) first = t;
+                        last = t;
+                        ++crossings;
+                    }
+                }
+                prev = y;
+            }
+
+            return Tail { level, crossings > 1 ? (crossings - 1) / ((last - first) / fs) : 0.0 };
+        };
+
+        check (ringOut (1000.0, 48000.0, 0.85).level < 1e-9, "below the threshold it dies away",
+               ringOut (1000.0, 48000.0, 0.85).level, 1e-9);
+
+        for (double fs : { 44100.0, 48000.0, 96000.0 })
+            for (double fc : { 100.0, 1000.0, 16311.0 })
+            {
+                const Tail t = ringOut (fc, fs, 1.0);
+                same ("full resonance oscillates at its set level", t.level, 0.2, 0.01);
+                same ("  at the cutoff", t.pitch / fc, 1.0, 0.002);
+            }
+
+        // However hot the input and wherever the cutoff, it stays finite and bounded.
+        double worst = 0.0;
+        bool finite = true;
+        for (double fs : { 44100.0, 96000.0 })
+            for (double fc : { 30.0, 2000.0, 16311.0, 40000.0 })
+                for (double res : { 0.5, 0.9, 1.0 })
+                {
+                    s950::Butterworth f;
+                    f.setCutoff (fc, fs, res);
+                    unsigned noise = 12345u;
+                    for (int i = 0; i < (int) fs; ++i)
+                    {
+                        noise = noise * 1664525u + 1013904223u;
+                        const double x = (i / 300) % 2 ? (noise >> 8) / 8388608.0 - 1.0
+                                                       : 2.0 * std::fmod (i * 110.0 / fs, 1.0) - 1.0;
+                        const double y = f.process (x);
+                        if (! std::isfinite (y)) finite = false;
+                        worst = std::max (worst, std::fabs (y));
+                    }
+                }
+
+        check (finite, "hot input never blows it up", worst, 0.0);
+        check (worst < 2.5, "  and never runs away", worst, 2.5);
     }
 
     // --------------------------------------------------------------- the player's trims
@@ -1102,19 +1369,48 @@ namespace
          * Comparing the whole note instead would say only that two different wobbles differ.
          */
         const std::vector<float> stillEarly (still.begin(), still.begin() + 2400);
-        const auto slowEarly = render ( 0.0, 99.0, 0.0, 2400);
-        const auto fastEarly = render (99.0, 99.0, 0.0, 2400);
+        const auto slowEarly = render ( 0.0, 50.0, 0.0, 2400);   // depth on the S950's own scale
+        const auto fastEarly = render (99.0, 50.0, 0.0, 2400);
 
         check (apart (fastEarly, stillEarly) > apart (slowEarly, stillEarly) * 1.5,
                "a rate trim makes it wobble sooner",
                apart (fastEarly, stillEarly), apart (slowEarly, stillEarly) * 1.5);
 
         /*
+         * The same on a keygroup riding the programme's shared LFO - desync clear. Its rate
+         * was worked out once when the programme arrived, so the Rate knob did nothing at all
+         * to these; heard as "the LFO knobs barely do anything".
+         */
+        {
+            auto shared = std::make_shared<s950::Patch> (*patch);
+            shared->keygroups[0].lfoDesync = false;
+
+            auto early = [&] (double rate)
+            {
+                s950::Engine engine (48000.0);
+                engine.setPatch (shared);
+                engine.trims.lfoRate .store (static_cast<float> (rate));
+                engine.trims.lfoDepth.store (50.0f);
+
+                // In host-sized blocks: the shared LFO moves on between them, not inside one.
+                std::vector<float> buffer (2400);
+                engine.noteOn (60, 100);
+                for (int at = 0; at < 2400; at += 120)
+                    engine.render (buffer.data() + at, 120);
+                return buffer;
+            };
+
+            check (apart (early (99.0), stillEarly) > apart (early (0.0), stillEarly) * 1.5,
+                   "  and on a keygroup riding the shared LFO",
+                   apart (early (99.0), stillEarly), apart (early (0.0), stillEarly) * 1.5);
+        }
+
+        /*
          * Delay, which is a fade-in rather than a wait: at the top of its range the depth
          * climbs for seven and a half seconds, so the start of the note is barely bent at all
          * where the same note without it is bent hard.
          */
-        const auto faded = render (99.0, 99.0, 99.0, 2400);
+        const auto faded = render (99.0, 50.0, 99.0, 2400);
         check (apart (faded, stillEarly) < apart (fastEarly, stillEarly) * 0.5,
                "a delay trim holds the wobble off the start",
                apart (faded, stillEarly), apart (fastEarly, stillEarly) * 0.5);
@@ -1996,6 +2292,7 @@ int main()
     checkEnvelopes();
     checkLfo();
     checkFilter();
+    checkLfoShapes();
     checkEngine();
     checkEventTiming();
     checkTrims();
