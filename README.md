@@ -41,9 +41,10 @@ Gotek, play it from a MIDI keyboard, and use the plugin in a DAW. The editor ope
 The plugin's half is also in [Plugin/README.md](Plugin/README.md#using-it) — how a disk is
 loaded, how programmes reach the host's own selector, what a saved song remembers (all of it:
 the whole image rides in the project), and the three tabs: **Program**, which edits every
-keygroup setting on the disk; **Perform**, the fifteen offsets with the MIDI controller
-numbers that reach them, plus glide, polyphony and Wide; and **Synth**, which makes sounds
-with no disk at all.
+keygroup setting on the disk; **Perform**, the offsets with the MIDI controller numbers that
+reach them, plus things the S950 never had: filter resonance up to self-oscillation, LFO
+shapes (saw, square, S&H), an LFO that reaches the filter and further than the machine's,
+glide, polyphony and Wide; and **Synth**, which makes sounds with no disk at all.
 
 [**CHANGELOG.md**](CHANGELOG.md) is what changed between releases, and is where the notes for
 a tag come from.

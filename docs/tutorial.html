@@ -430,12 +430,12 @@ there, save it, and load it here.</p>
 <h3>PERFORM — what you do on top of it</h3>
 
 <figure>
-  <img src="img/plugin-perform.png" alt="The Perform tab: the offsets, glide and polyphony, Wide, and the two envelopes as shapes">
+  <img src="img/plugin-perform.png" alt="The Perform tab: filter and resonance, velocity, the LFO with its shape, glide and polyphony, Wide, and the two envelopes as shapes">
   <figcaption>The Perform tab. Cyan panels are offsets on top of the programme; violet ones
   are the extras the S950 never had. Nothing here is ever written to the disk.</figcaption>
 </figure>
 
-<p><strong>Fifteen offsets</strong>, on top of whatever programme is loaded. Every one is an
+<p><strong>The offsets</strong>, on top of whatever programme is loaded. Every one is an
 <em>offset</em> from what the disk says rather than a setting: it reads zero until you turn
 it, double-clicks back to zero, and zero means "play what is on the floppy". That is not a
 detail. A programme carries its own cutoff and its own envelope for each keygroup, often
@@ -443,7 +443,7 @@ quite different ones across the keyboard, and an absolute control would flatten 
 the moment you touched it. An offset keeps the shape its author gave the programme and moves
 the whole of it at once — which is what "brighter" means on an instrument like this.</p>
 
-<p>All fifteen are automatable by the host, and all fifteen answer a MIDI controller — the
+<p>All of them are automatable by the host, and all of them answer a MIDI controller. The
 numbers are in each panel's corner:</p>
 
 <table>
@@ -453,7 +453,8 @@ numbers are in each panel's corner:</p>
       <td>CC 73, 75, 79, 72 · ±99</td></tr>
   <tr><th>VCF envelope</th><td>Attack, Decay, Sustain, Release</td>
       <td>CC 102, 103, 104, 105 · ±99</td></tr>
-  <tr><th>LFO</th><td>Rate, Depth, Delay</td><td>CC 76, 77, 78 · 0–99</td></tr>
+  <tr><th>LFO</th><td>Rate, Delay</td><td>CC 76, 78 · ±99</td></tr>
+  <tr><th>LFO</th><td>Pitch</td><td>CC 77 · 0–99</td></tr>
   <tr><th>Velocity</th><td>Freq, Loudness</td><td>CC 109, 112 · 0–99</td></tr>
 </table>
 
@@ -461,6 +462,19 @@ numbers are in each panel's corner:</p>
 labelled <em>cutoff</em>, <em>attack</em> or <em>vibrato rate</em> reaches the right ones with
 no mapping at all. 102–105 and 109/112 are undefined numbers, taken for the filter envelope
 and for velocity because GM has no assignments for those.</p>
+
+<p>The LFO knobs follow the S950's own scale over the S950's own range and <strong>carry on
+past it</strong>:</p>
+
+<ul>
+  <li><strong>Pitch</strong> keeps the machine's 1.5 cents a step up to +50, then grows to a
+      whole octave at +99.</li>
+  <li><strong>Rate</strong> slows below the machine's 1.8&nbsp;Hz, down to 0.1&nbsp;Hz.</li>
+  <li><strong>Delay</strong> can go negative, which shortens a programme's slow fade-in, or
+      removes it at −99, so short notes get the vibrato too.</li>
+</ul>
+
+<p>At zero, they're exactly the machine's.</p>
 
 <p>The two envelopes are <strong>dragged as shapes</strong> rather than set as eight knobs.
 The corners are the stages, and the graph draws the result for one representative keygroup —
@@ -470,9 +484,9 @@ sound like, not an abstract curve.</p>
 <p>Three things behave in ways worth knowing before they surprise you:</p>
 
 <ul>
-  <li><strong>The LFO and velocity knobs only add</strong>, 0 to 99, where the filter and
-      envelope trims go both ways. Nearly every programme leaves the LFO switched off, so a
-      knob that went negative would spend its whole lower half asking for less than nothing.</li>
+  <li><strong>LFO Pitch and the velocity knobs only add</strong>, 0 to 99, where the rest go
+      both ways. Nearly every programme leaves the LFO's depth at zero, so a knob that went
+      negative would spend its whole lower half asking for less than nothing.</li>
   <li><strong>Velocity → Loudness reaches the next note you play</strong>, not one already
       sounding. It decides how much softer a soft note is, and how hard a key was struck is
       settled when the key goes down. Velocity → Freq <em>does</em> reach a sounding note.</li>
@@ -484,10 +498,23 @@ sound like, not an abstract curve.</p>
 
 <h3>The extras — not on the S950</h3>
 
-<p>Three things the machine never had, in violet, each off by default so a disk still plays
-exactly as the machine would:</p>
+<p>Things the machine never had, in violet, each off or at zero by default, so a disk still
+plays exactly as the machine would:</p>
 
 <table>
+  <tr><th>Resonance</th><td>Res</td><td>CC 71</td>
+      <td>A peak at the filter's cutoff, rising to about +15&nbsp;dB. Past about 92% the
+      filter <strong>self-oscillates</strong>: it sings a sine at the cutoff, following the
+      Filter knob, the filter envelope and velocity, switched on and off by the amp envelope.
+      For a sine you can play in tune, set the keygroups' key-to-filter to 99 on the Program
+      tab. At 0% it's the S950's filter exactly.</td></tr>
+  <tr><th>LFO shape</th><td>Shape</td><td>CC 113</td>
+      <td>Sine (the S950's), Saw, Square or S&amp;H. S&amp;H picks a new random pitch every
+      cycle, at Rate. Every shape starts where the sine does, so switching doesn't jump a held
+      note.</td></tr>
+  <tr><th>LFO to filter</th><td>Filter</td><td>CC 114</td>
+      <td>The LFO moves the cutoff too, by up to three octaves either way, independently of
+      Pitch. Try Square or S&amp;H with some Res for the classic stepped filter.</td></tr>
   <tr><th>Glide</th><td>On, Time</td><td>CC 65, 5</td>
       <td>Portamento. Each note slides in from the last note played in the <em>same
       keygroup</em>, over a fixed time (CC 5: 0 is no glide, 127 is three seconds). Crossing

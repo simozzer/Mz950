@@ -74,9 +74,9 @@ by `build.ps1` on every disk in `disks/`, round-trips every setting and checks t
 byte of the image moves. `crosscheck.ps1` on an edited image confirms the C# Studio reads it
 identically. **An edited programme has not yet been loaded on a real S950.**
 
-**The player's controls.** Sixteen parameters, all automatable by the host and all reachable
-from a MIDI controller: gain, and fifteen trims that move every keygroup of the loaded
-programme together.
+**The player's controls.** Everything on the Perform tab, plus gain, is automatable by the
+host and reachable from a MIDI controller. Most of it is trims that move every keygroup of the
+loaded programme together.
 
 A trim is an *offset* from what the disk says, not a setting. It reads zero until you turn it
 and double-clicks back to zero, and zero means "play what is on the floppy". That matters
@@ -87,19 +87,50 @@ touched. An offset keeps the shape its author gave it and moves the whole of it,
 
 | group | controls | CC | range |
 |---|---|---|---|
-| Sample | Filter | 74 | ±99 |
+| Filter | Filter | 74 | ±99 |
+| Filter | Res *(not on the S950)* | 71 | 0–100%; self-oscillates from about 92% |
 | VCF | Amnt | 70 | ±50 |
 | VCA envelope | Attack, Decay, Sustain, Release | 73, 75, 79, 72 | ±99 |
 | VCF envelope | Attack, Decay, Sustain, Release | 102, 103, 104, 105 | ±99 |
-| LFO | Rate, Depth, Delay | 76, 77, 78 | 0..99 |
+| LFO | Shape *(Sine is the S950's)* | 113 | Sine, Saw, Square, S&H; CC in bands of 32 |
+| LFO | Rate, Delay | 76, 78 | ±99 |
+| LFO | Pitch | 77 | 0..99 |
+| LFO | Filter *(not on the S950)* | 114 | 0..99, up to ±3 octaves of cutoff |
 | Velocity | Freq, Loudness | 109, 112 | 0..99 |
 | Glide *(not on the S950)* | On, Time | 65, 5 | off/on; 0 (no glide) – 3 s |
 | Polyphony *(not on the S950)* | Poly | 106 | 1 (mono) – 8; CC in bands of 16 |
 | Wide *(not on the S950)* | On, Detune, Spread, Offset start | 107, 108, 110, 111 | off/on; ±0–50 cents; 0–100%; off/on |
 
-**Glide is the one addition to the machine.** Everything else here is the S950, measured;
-the S950 has no portamento. It is off by default, so a programme still plays as the disk
-describes it. CC 65 and CC 5 are General MIDI's own portamento switch and time, so a keyboard
+**The additions** are marked *not on the S950* above and drawn in violet on the tab.
+Everything else is the S950, measured. Every addition is off or at zero by default, so a
+programme plays as the disk describes it until you reach for one.
+
+**Resonance.** The S950's filter is a plain 36 dB/octave Butterworth with no peak. **Res**
+raises one up at the cutoff, to about +15 dB at 90%. The input eases down as it rises, by about
+6 dB at the top, the way an analogue filter loses passband, so a hot sample doesn't clip. Past
+about **92% the filter self-oscillates**: it produces a sine at the cutoff that follows Filter,
+the filter envelope, velocity and the LFO's Filter depth, and the VCA switches it on and off.
+It settles at −14 dB per voice, within 0.1% of the cutoff, with harmonics and aliasing below
+−54 dB at 44.1, 48 and 96 kHz. At 0% the filter matches the S950's to within 10⁻¹². It isn't
+tuned to the keyboard: for a playable sine, set the keygroups' key-to-filter to 99 on the
+Program tab.
+
+**The LFO.** The S950's is a sine that moves the pitch. The Perform tab adds three things:
+- **Shape**: Saw, Square and S&H as well as Sine. Every shape starts where the sine does, so
+  changing shape under a held note doesn't jump its pitch. S&H picks a new random level each
+  cycle. Keygroups sharing the programme's LFO (desync off) step together, and desynced ones
+  step on their own.
+- **A longer reach:**
+  - **Pitch** depth follows the machine's 1.5 cents a step to +50, then grows to a whole
+    octave at +99.
+  - **Rate** goes below the machine's slowest (1.8 Hz), down to 0.1 Hz.
+  - **Delay** can go negative, to shorten or remove a programme's fade-in.
+- **Filter depth**: the LFO moves the cutoff as well, by up to three octaves either way,
+  independently of Pitch. With Square or S&H, that's the classic stepped filter.
+
+At zero, every one of these is the S950's own LFO.
+
+**Glide.** The S950 has no portamento. CC 65 and CC 5 are General MIDI's own portamento switch and time, so a keyboard
 with a glide control reaches them with no mapping. A glide takes the set time whatever the
 interval, straight in semitones, and **stays inside a keygroup**: a note slides from the last
 note played in its own keygroup, and crossing into another one — a different sample, and on a
@@ -126,8 +157,9 @@ and the release hand-over all move both halves together.
 
 72–79 are the General MIDI sound controllers, so a keyboard with knobs labelled *cutoff* and
 *attack* reaches the right ones with no mapping — including 76, 77 and 78 for vibrato rate,
-depth and delay, which is what this machine's LFO is. 102–105 and 109/112 are undefined
-numbers taken for the filter envelope and for velocity, which GM has no assignments for.
+depth and delay, which is what this machine's LFO is, and 71 for resonance. 102–105, 109/112,
+113 and 114 are undefined numbers taken for the filter envelope, velocity, the LFO's shape and
+its filter depth, which GM has no assignments for.
 
 The two envelopes are dragged as shapes rather than set as eight knobs: the corners are the
 stages, and the graph shows the result for one representative keygroup — the programme's own
@@ -135,10 +167,10 @@ values with the trim added — so it is honest about what you will actually hear
 
 Three behaviours worth knowing before they surprise you:
 
-- **The LFO and velocity knobs only add.** The filter and envelope trims go both ways because
-  a programme always has an envelope and always has a cutoff. Nearly every programme leaves
-  the LFO switched off, so a symmetric knob there would spend its whole lower half asking for
-  less than nothing and clamping at zero.
+- **LFO Pitch and Filter, and the velocity knobs, only add.** Nearly every programme leaves the
+  LFO's depth at zero, so a symmetric knob there would spend its whole lower half asking for
+  less than nothing. Rate and Delay go both ways, because a programme always has a rate and a
+  fade-in to move. Past the machine's own range they carry on, as described above.
 - **Velocity → Loudness reaches the next note you play**, not one already sounding. It decides
   how much softer a soft note is, which is a question about the strike, and the strike is over.
   Velocity → Freq does reach a sounding note, because a filter control you cannot play with is
@@ -168,7 +200,8 @@ checked on its own, long before a plugin will load.
 
 ```
 Source/S950/Cal.h           the measured constants, and the mappings from panel bytes
-Source/S950/Filter.h        6th-order Butterworth, three biquads
+Source/S950/Filter.h        6th-order Butterworth: two biquads and a state-variable stage
+                            that resonates and self-oscillates (not the S950's)
 Source/S950/Patch.h         Sound, KeygroupPatch, Patch — what a voice needs
 Source/S950/Disk.h/cpp      reading an .hfe or .img into a Patch; editing keygroup settings
                             in place; building a disk from nothing (samples, programmes,

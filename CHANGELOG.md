@@ -6,6 +6,73 @@ Every number here came off a recording of a real S950 rather than out of a manua
 a change is a measurement it says what was measured and what it replaced. Where it is an
 assumption it says that too — those are the ones another afternoon with a recorder settles.
 
+## v0.6.0 — 2026-09-28
+
+Filter resonance up to self-oscillation, LFO shapes, and a Perform-tab LFO that reaches the
+filter and goes further than the S950's. None of it is written to the disk, and at zero all of
+it is the machine.
+
+### Filter resonance
+
+A **Res** knob beside Filter on the Perform tab, MIDI CC 71. The S950's filter has no
+resonance, so this is an addition like glide and Wide, in their violet. It starts at 0%, where
+the filter is the machine's, matching the old one to within 1e-12.
+
+- **Up to 90%:** the peak at the cutoff rises to about +15 dB and the slope stays 36 dB an
+  octave. The input eases down as it rises, by about 6 dB at the top of the range, the way an
+  analogue filter loses passband, so a hot sample doesn't clip.
+- **Past about 92%:** the filter **self-oscillates**, a sine at the cutoff. It follows the
+  Filter knob, the filter envelope and velocity, and the VCA gates it. It settles at -14 dB
+  per voice. The pitch is within 0.2% of the cutoff, and harmonics and aliasing stay below
+  -54 dB at 44.1, 48 and 96 kHz, even with the filter wide open.
+
+How: the filter's resonant stage (Q 1.93) is now a state-variable filter instead of a biquad,
+since a biquad can only ring, never sustain. It has an automatic level control: its damping
+rises with its own smoothed band-pass power and, past the threshold, goes negative. A first
+version damped on the instantaneous signal. It held the level just as well but bent the sine,
+and at a 16 kHz cutoff it folded a tone back at -16 dB. The smoothed follower removed that.
+The other two stages are unchanged. Resonance moves notes already sounding.
+
+### LFO shapes
+
+A **Shape** box in the Perform tab's LFO panel, MIDI CC 113 in four bands of 32: **Sine**,
+**Saw**, **Square** and **S&H**. Sine is the S950's LFO and stays the default. The other three
+are additions, and like Res it is a performance setting that is never written to the disk.
+Rate, depth, delay and desync work as before for every shape.
+
+- **Every shape starts where the sine does,** at the centre and heading up, so switching
+  shape under a held note doesn't throw it to the other side of its pitch.
+- **Saw** rises to the top, jumps to the bottom and rises back.
+- **Square** sits high for the first half of each cycle.
+- **S&H** holds one random pitch per cycle and steps to a new one at Rate. The level comes
+  from a hash of the cycle number, not a running generator. So voices riding the programme's
+  shared LFO (desync off) step together, while a desynced keygroup's notes each have their own.
+
+### The Perform tab's LFO reaches past the S950's, and can move the filter
+
+Reported: the LFO knobs were hard to hear. On the running plugin they did work: Depth +50 was
+±79 cents on PWM STRGS. But four things got in the way, and all four are fixed:
+
+- **Rate did nothing on shared-LFO keygroups (fixed bug).** Keygroups riding the programme's
+  shared LFO (desync off) ignored the Rate knob entirely: the shared oscillator's speed was set
+  once, when the programme loaded. It now takes the trim every stretch.
+- **Pitch depth only reached the S950's ±150 cents.** It keeps the machine's 1.5 cents a step up to
+  +50, then grows to **a whole octave at +99**, so square and S&H become pitch jumps you can't
+  miss.
+- **Rate could only add.** It now goes both ways. Above zero it's the S950's measured curve.
+  Below it, it carries on past the machine's slowest (1.8 Hz) down to **0.1 Hz**.
+- **Delay could only add**, so it couldn't remove a programme's slow fade-in, and short notes
+  never reached any depth. It goes both ways too. Below zero it shortens the fade, to **none at
+  all** at -99.
+
+**Filter depth**, new: a knob in the LFO panel, on MIDI CC 114, that sends the LFO to the cutoff,
+up to three octaves either way. It uses the LFO's rate, shape and delay, and its depth is
+separate from Pitch. A square or S&H there gives the classic stepped filter. Not on the
+S950, so it's violet.
+
+With every trim at zero the LFO is exactly the S950's, as before. A session saved with LFO
+Depth past +50 will now sound deeper.
+
 ## v0.5.3 — 2026-09-28
 
 The Program tab's keygroups over a piano keyboard, a keygroup list, and a demo mode that
