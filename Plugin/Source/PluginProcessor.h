@@ -7,6 +7,7 @@
 #include "S950/SynthPatch.h"
 
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <thread>
 
@@ -182,6 +183,14 @@ public:
     struct KeygroupActivity { unsigned hits = 0; int lastNote = -1; bool sounding = false; };
     KeygroupActivity getKeygroupActivity (int keygroup) const;
 
+    /// Whether a key is held down over MIDI right now - for the dots on the Program tab's
+    /// keyboard. Written on the audio thread, read on the message thread, one bit a key.
+    bool isNoteHeld (int note) const
+    {
+        if (note < 0 || note > 127) return false;
+        return ((heldNotes[note >> 6].load (std::memory_order_relaxed) >> (note & 63)) & 1u) != 0;
+    }
+
     /// Which tab the window last showed - 0 Program, 1 Perform, 2 Synth - so reopening it,
     /// which a host does every time the window is closed, comes back where it was. Not saved.
     int editorTab = 0;
@@ -237,6 +246,18 @@ private:
     s950::synth::WaveCache waveCache;       // touched only by the render thread
     bool   synthDisk    = false;
     bool   renderWanted = false;
+
+    // The keys held over MIDI, one bit each: set on note-on, cleared on note-off and by
+    // all-notes-off. See isNoteHeld.
+    std::atomic<std::uint64_t> heldNotes[2] { {0}, {0} };
+
+    void holdNote (int note, bool down)
+    {
+        if (note < 0 || note > 127) return;
+        const std::uint64_t bit = std::uint64_t (1) << (note & 63);
+        if (down) heldNotes[note >> 6].fetch_or  (bit,  std::memory_order_relaxed);
+        else      heldNotes[note >> 6].fetch_and (~bit, std::memory_order_relaxed);
+    }
     double renderDueAt  = 0.0;
 
     std::unique_ptr<std::thread> renderThread;

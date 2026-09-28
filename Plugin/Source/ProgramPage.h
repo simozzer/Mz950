@@ -10,12 +10,15 @@
 #include <vector>
 
 /*
- * The programme's keygroups across the keyboard, one bar each, clicked to choose one.
+ * The programme's keygroups over a piano keyboard, one bar each, clicked to choose one.
  *
- * Overlapping keygroups - the crossfaded pianos, the layered ARP2600s - are stacked in lanes
- * rather than drawn over each other, so every one can be seen and reached. The axis is the
- * whole MIDI range: a keygroup's position on it is the answer to "which keys is this?", which
- * a list of numbers makes you work out.
+ * The bars sit in lanes above the keys, each spanning exactly the keys it covers - the
+ * overlapping keygroups of the crossfaded pianos and layered ARP2600s stacked one above the
+ * other rather than drawn over each other, so every one can be seen and reached. Below them
+ * the keyboard itself, C0 to G8: the selected keygroup's keys shaded in the Program colour,
+ * the keys of the others faintly, keys nobody plays left bare - so "which keys is this?" is
+ * answered on the keys. A key held over MIDI carries a blue dot. Clicking a key chooses the
+ * keygroup that plays it.
  */
 class KeygroupStrip : public juce::Component,
                       public juce::SettableTooltipClient
@@ -39,18 +42,37 @@ public:
      */
     void setActivity (std::vector<bool> lit, std::vector<int> notes);
 
+    /// The keys held over MIDI, 128 of them - each drawn with a dot.
+    void setHeld (std::vector<bool> held);
+
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseMove (const juce::MouseEvent&) override;
 
+    static constexpr int firstKey = 24, lastKey = 127;       // C0 to G8
+
 private:
+    // the areas: bars along the top, the keyboard under them, the octave names at the bottom
+    juce::Rectangle<float> barsArea() const;
+    juce::Rectangle<float> keysArea() const;
+
+    // the piano's geometry - white keys all the same width, black keys over their joins
+    static bool isBlack (int note);
+    int   whiteCount() const;
+    float whiteWidth() const;
+    juce::Rectangle<float> keyRect (int note) const;          // within keysArea
+    float keyLeft (int note) const;                            // the key's span along the axis
+    float keyRight (int note) const;
+
     juce::Rectangle<float> barFor (int keygroup) const;
     int keygroupAt (juce::Point<float>) const;
+    int keyAt (juce::Point<float>) const;
 
     std::vector<Range> ranges;
     std::vector<int>   lane;
     std::vector<bool>  lit;
     std::vector<int>   notes;
+    std::vector<bool>  held = std::vector<bool> (128, false);
     int lanes = 1;
     int selected = -1;
 };

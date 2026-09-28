@@ -100,30 +100,100 @@ void KeygroupStrip::setActivity (std::vector<bool> nowLit, std::vector<int> nowN
     repaint();
 }
 
+void KeygroupStrip::setHeld (std::vector<bool> nowHeld)
+{
+    if (nowHeld == held) return;
+    held = std::move (nowHeld);
+    repaint();
+}
+
 /*
- * The strip's axis runs from C0 (note 24) to G8 (127), which is the keyboard the S950 has:
- * Simon reports it plays nothing below C0, and the two octaves under it that MIDI allows
- * were a fifth of the strip spent on keys the machine has no answer for. A keygroup whose
- * stored low key is under 24 is drawn from the left edge.
+ * The keyboard runs from C0 (note 24) to G8 (127), which is the keyboard the S950 has: Simon
+ * reports it plays nothing below C0, and the two octaves under it that MIDI allows were a
+ * fifth of the strip spent on keys the machine has no answer for. A keygroup whose stored low
+ * key is under 24 is drawn from the left edge.
+ *
+ * The strip's height, top to bottom: the keygroup bars, the keys, the octave names.
  */
-constexpr int firstKey = 24;
-constexpr int keySpan  = 128 - firstKey;
+namespace
+{
+    constexpr float labelH    = 14.0f;
+    constexpr float keysH     = 44.0f;
+    constexpr float barsGap   = 4.0f;
+    constexpr float blackFrac = 0.6f;    // a black key's width, of a white key's
+    constexpr float blackLen  = 0.62f;   // and its length, of the keyboard's height
+
+    const juce::Colour whiteKey { 0xffc9ced6 };
+    const juce::Colour blackKey { 0xff15171b };
+    const juce::Colour heldDot  { 0xff3b82f6 };    // blue: a key held over MIDI
+}
+
+juce::Rectangle<float> KeygroupStrip::barsArea() const
+{
+    return getLocalBounds().toFloat().withTrimmedBottom (labelH + keysH + barsGap).reduced (2.0f, 2.0f);
+}
+
+juce::Rectangle<float> KeygroupStrip::keysArea() const
+{
+    auto a = getLocalBounds().toFloat().reduced (2.0f, 0.0f);
+    return { a.getX(), a.getBottom() - labelH - keysH, a.getWidth(), keysH };
+}
+
+bool KeygroupStrip::isBlack (int note)
+{
+    switch (note % 12) { case 1: case 3: case 6: case 8: case 10: return true; default: return false; }
+}
+
+int KeygroupStrip::whiteCount() const
+{
+    int n = 0;
+    for (int k = firstKey; k <= lastKey; ++k) if (! isBlack (k)) ++n;
+    return n;
+}
+
+float KeygroupStrip::whiteWidth() const
+{
+    return keysArea().getWidth() / (float) whiteCount();
+}
+
+/// Where a key starts and ends along the axis: a white key its slot, a black key the narrow
+/// span centred on the join between the white keys either side of it.
+float KeygroupStrip::keyLeft (int note) const
+{
+    note = juce::jlimit (firstKey, lastKey, note);
+    int whitesBefore = 0;
+    for (int k = firstKey; k < note; ++k) if (! isBlack (k)) ++whitesBefore;
+
+    const float ww = whiteWidth(), x0 = keysArea().getX();
+    return isBlack (note) ? x0 + whitesBefore * ww - ww * blackFrac * 0.5f
+                          : x0 + whitesBefore * ww;
+}
+
+float KeygroupStrip::keyRight (int note) const
+{
+    const float ww = whiteWidth();
+    return keyLeft (note) + (isBlack (juce::jlimit (firstKey, lastKey, note)) ? ww * blackFrac : ww);
+}
+
+juce::Rectangle<float> KeygroupStrip::keyRect (int note) const
+{
+    const auto a = keysArea();
+    const float l = keyLeft (note), r = keyRight (note);
+    return isBlack (note) ? juce::Rectangle<float> (l, a.getY(), r - l, a.getHeight() * blackLen)
+                          : juce::Rectangle<float> (l, a.getY(), r - l, a.getHeight());
+}
 
 juce::Rectangle<float> KeygroupStrip::barFor (int k) const
 {
-    auto area = getLocalBounds().toFloat().withTrimmedBottom (16.0f).reduced (2.0f, 2.0f);
+    const auto area  = barsArea();
+    const float laneH = area.getHeight() / (float) lanes;
+    const auto& r     = ranges[(size_t) k];
 
-    const float keyWidth = area.getWidth() / (float) keySpan;
-    const float laneH    = area.getHeight() / (float) lanes;
-    const auto& r        = ranges[(size_t) k];
+    const int lo = juce::jlimit (firstKey, lastKey, std::min (r.low, r.high));
+    const int hi = juce::jlimit (firstKey, lastKey, std::max (r.low, r.high));
 
-    const int lo = juce::jlimit (firstKey, 127, std::min (r.low, r.high));
-    const int hi = juce::jlimit (firstKey, 127, std::max (r.low, r.high));
-
-    return { area.getX() + (lo - firstKey) * keyWidth,
-             area.getY() + lane[(size_t) k] * laneH,
-             (hi - lo + 1) * keyWidth,
-             laneH - 2.0f };
+    const float left = keyLeft (lo), right = keyRight (hi);
+    return { left, area.getY() + lane[(size_t) k] * laneH, right - left, laneH - 2.0f };
 }
 
 int KeygroupStrip::keygroupAt (juce::Point<float> where) const
@@ -132,30 +202,106 @@ int KeygroupStrip::keygroupAt (juce::Point<float> where) const
         if (barFor (k).contains (where))
             return k;
 
+    // On the keys: the keygroup that plays that key - the one being edited if it does,
+    // otherwise the first that does.
+    const int key = keyAt (where);
+    if (key < 0) return -1;
+
+    auto covers = [&] (int k)
+    {
+        const auto& r = ranges[(size_t) k];
+        return key >= std::min (r.low, r.high) && key <= std::max (r.low, r.high);
+    };
+
+    if (selected >= 0 && selected < (int) ranges.size() && covers (selected)) return selected;
+    for (int k = 0; k < (int) ranges.size(); ++k) if (covers (k)) return k;
+    return -1;
+}
+
+int KeygroupStrip::keyAt (juce::Point<float> where) const
+{
+    if (! keysArea().contains (where)) return -1;
+
+    // black keys lie on top, so they are asked first
+    for (int n = firstKey; n <= lastKey; ++n)
+        if (isBlack (n) && keyRect (n).contains (where)) return n;
+    for (int n = firstKey; n <= lastKey; ++n)
+        if (! isBlack (n) && keyRect (n).contains (where)) return n;
     return -1;
 }
 
 void KeygroupStrip::paint (juce::Graphics& g)
 {
-    auto area = getLocalBounds().toFloat();
+    const auto area = getLocalBounds().toFloat();
+    const auto bars = barsArea();
+    const auto keys = keysArea();
+
+    // --- the lane background, with a faint line up from every C so bars read against keys
     g.setColour (juce::Colour (0xff17191d));
-    g.fillRoundedRectangle (area.withTrimmedBottom (16.0f), 4.0f);
+    g.fillRoundedRectangle (bars.expanded (2.0f), 4.0f);
 
-    // Every C along the bottom, so a bar's position can be read as keys.
-    const auto keys = area.withTrimmedBottom (16.0f).reduced (2.0f, 2.0f);
-    const float keyWidth = keys.getWidth() / (float) keySpan;
-
-    g.setFont (look::font (10.0f));
-    for (int n = firstKey; n < 128; n += 12)
+    for (int n = firstKey; n <= lastKey; n += 12)
     {
-        const float x = keys.getX() + (n - firstKey) * keyWidth;
-        g.setColour (juce::Colours::white.withAlpha (0.08f));
-        g.drawVerticalLine ((int) x, keys.getY(), keys.getBottom());
-        g.setColour (look::dim);
-        g.drawText (noteName (n), juce::Rectangle<float> (x - 1.0f, area.getBottom() - 15.0f, 30.0f, 14.0f),
-                    juce::Justification::centredLeft, false);
+        g.setColour (juce::Colours::white.withAlpha (0.06f));
+        g.drawVerticalLine ((int) keyLeft (n), bars.getY(), bars.getBottom());
     }
 
+    // --- the keyboard. How strongly a key is shaded: the selected keygroup's keys fully
+    // (every keygroup's, with "All keygroups"), the other keygroups' faintly, none bare.
+    auto shadeOf = [this] (int note)
+    {
+        float best = 0.0f;
+        for (int k = 0; k < (int) ranges.size(); ++k)
+        {
+            const auto& r = ranges[(size_t) k];
+            if (note < std::min (r.low, r.high) || note > std::max (r.low, r.high)) continue;
+            best = std::max (best, (selected < 0 || selected == k) ? 1.0f : 0.28f);
+        }
+        return best;
+    };
+
+    for (int n = firstKey; n <= lastKey; ++n)              // white keys first, black on top
+    {
+        if (isBlack (n)) continue;
+        const auto r = keyRect (n);
+        const float s = shadeOf (n);
+        g.setColour (s > 0.0f ? whiteKey.interpolatedWith (selectedBar, 0.62f * s) : whiteKey.darker (0.25f));
+        g.fillRect (r.reduced (0.5f, 0.0f));
+    }
+    g.setColour (look::window);
+    for (int n = firstKey; n <= lastKey; ++n)
+        if (! isBlack (n)) g.drawVerticalLine ((int) keyLeft (n), keys.getY(), keys.getBottom());
+
+    for (int n = firstKey; n <= lastKey; ++n)
+    {
+        if (! isBlack (n)) continue;
+        const auto r = keyRect (n);
+        const float s = shadeOf (n);
+        g.setColour (s > 0.0f ? blackKey.interpolatedWith (selectedBar.darker (0.35f), 0.75f * s) : blackKey);
+        g.fillRoundedRectangle (r.withTrimmedTop (-2.0f), 1.5f);
+    }
+
+    // --- a blue dot on every key held over MIDI, low on the key where a finger would be
+    const float dotR = juce::jlimit (2.0f, 4.0f, whiteWidth() * 0.32f);
+    for (int n = firstKey; n <= lastKey; ++n)
+    {
+        if (n >= (int) held.size() || ! held[(size_t) n]) continue;
+        const auto r = keyRect (n);
+        const juce::Point<float> c (r.getCentreX(), r.getBottom() - dotR - 3.0f);
+        g.setColour (heldDot);
+        g.fillEllipse (c.x - dotR, c.y - dotR, dotR * 2.0f, dotR * 2.0f);
+        g.setColour (isBlack (n) ? juce::Colours::white.withAlpha (0.8f) : look::window.withAlpha (0.7f));
+        g.drawEllipse (c.x - dotR, c.y - dotR, dotR * 2.0f, dotR * 2.0f, 1.0f);
+    }
+
+    // --- every C named under the keys
+    g.setFont (look::font (10.0f));
+    g.setColour (look::dim);
+    for (int n = firstKey; n <= lastKey; n += 12)
+        g.drawText (noteName (n), juce::Rectangle<float> (keyLeft (n), area.getBottom() - labelH, 30.0f, labelH),
+                    juce::Justification::centredLeft, false);
+
+    // --- the keygroup bars
     for (int k = 0; k < (int) ranges.size(); ++k)
     {
         const auto bar     = barFor (k);
@@ -175,9 +321,9 @@ void KeygroupStrip::paint (juce::Graphics& g)
 
             // and a marker at the key it answered
             const int note = k < (int) notes.size() ? notes[(size_t) k] : -1;
-            if (note >= firstKey && note < 128)
+            if (note >= firstKey && note <= lastKey)
             {
-                const float x = keys.getX() + (note - firstKey + 0.5f) * keyWidth;
+                const float x = (keyLeft (note) + keyRight (note)) * 0.5f;
                 g.fillRect (juce::Rectangle<float> (x - 1.0f, bar.getY() + 3.0f, 2.0f, bar.getHeight() - 6.0f));
             }
         }
@@ -198,12 +344,16 @@ void KeygroupStrip::mouseDown (const juce::MouseEvent& e)
 
 void KeygroupStrip::mouseMove (const juce::MouseEvent& e)
 {
-    const int k = keygroupAt (e.position);
+    const int k   = keygroupAt (e.position);
+    const int key = keyAt (e.position);
 
-    if (k < 0) { setTooltip ({}); return; }
+    // over a key, its name first - and "no keygroup" if nothing plays it
+    const juce::String keyText = key >= 0 ? noteName (key) + " (" + juce::String (key) + ")   -   " : juce::String();
+
+    if (k < 0) { setTooltip (key >= 0 ? keyText + "no keygroup plays this key" : juce::String()); return; }
 
     const auto& r = ranges[(size_t) k];
-    setTooltip ("Keygroup " + juce::String (k + 1) + ": " + noteName (r.low) + " to "
+    setTooltip (keyText + "Keygroup " + juce::String (k + 1) + ": " + noteName (r.low) + " to "
                 + noteName (r.high) + (r.sample.isNotEmpty() ? "   -   " + r.sample : juce::String()));
 }
 
@@ -363,6 +513,11 @@ void ProgramPage::timerCallback()
     }
 
     strip.setActivity (std::move (lit), std::move (notes));
+
+    // the keys held over MIDI, for the dots on the keyboard
+    std::vector<bool> held (128);
+    for (int n = 0; n < 128; ++n) held[(size_t) n] = processor.isNoteHeld (n);
+    strip.setHeld (std::move (held));
 }
 
 void ProgramPage::add (KeygroupParam p, int onPage, const char* name, const char* trimId, bool zone2)
@@ -634,7 +789,8 @@ void ProgramPage::resized()
      * The keygroups panel: the strip across the keyboard, and above it the buttons and the
      * line that says which keygroup is being edited.
      */
-    keygroupPanel.setBounds (r.removeFromTop (look::Panel::headerHeight + 28 + 6 + 84 + 8));
+    // the strip: keygroup bars in lanes over a keyboard, which is why it is taller than a bar
+    keygroupPanel.setBounds (r.removeFromTop (look::Panel::headerHeight + 28 + 6 + 112 + 8));
     {
         auto area = keygroupPanel.content();
 
@@ -646,7 +802,7 @@ void ProgramPage::resized()
         detail.setBounds (top);
 
         area.removeFromTop (6);
-        strip.setBounds (area.removeFromTop (84));
+        strip.setBounds (area.removeFromTop (112));
     }
 
     /*

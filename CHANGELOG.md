@@ -6,6 +6,17 @@ Every number here came off a recording of a real S950 rather than out of a manua
 a change is a measurement it says what was measured and what it replaced. Where it is an
 assumption it says that too — those are the ones another afternoon with a recorder settles.
 
+## Unreleased
+
+### The Program tab's keygroups over a piano keyboard
+
+The strip of keygroup bars now sits over a keyboard, C0 to G8, drawn as one: white keys the
+same width, black keys over their joins, and each keygroup's bar spanning exactly the keys it
+covers. The selected keygroup's keys are shaded in the Program amber - every keygroup's, with
+**All keygroups** - the other keygroups' keys faintly, and keys nothing plays are left grey.
+**A key held over MIDI shows a blue dot**, ringed so it reads on an amber key or a black one.
+Clicking a key chooses the keygroup that plays it, and hovering names the key.
+
 ## v0.5.2 — 2026-09-28
 
 The Windows file dialog, a smaller window with a balanced layout, and old Synth-tab disks put

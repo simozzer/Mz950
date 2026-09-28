@@ -585,9 +585,15 @@ void VirtualS950Processor::processBlock (juce::AudioBuffer<float>& buffer,
         const int  at = meta.samplePosition;
 
         if (m.isNoteOn())
+        {
             engine->noteOn (m.getNoteNumber(), m.getVelocity(), at);
+            holdNote (m.getNoteNumber(), true);
+        }
         else if (m.isNoteOff())
+        {
             engine->noteOff (m.getNoteNumber(), at);
+            holdNote (m.getNoteNumber(), false);
+        }
         else if (m.isController() && m.getControllerNumber() == 1)
             engine->modwheel (m.getControllerValue(), at);
         else if (m.isPitchWheel())
@@ -598,7 +604,11 @@ void VirtualS950Processor::processBlock (juce::AudioBuffer<float>& buffer,
         else if (m.isChannelPressure())
             engine->aftertouch (m.getChannelPressureValue(), at);
         else if (m.isAllNotesOff() || m.isAllSoundOff())
+        {
             engine->allNotesOff (at);
+            heldNotes[0].store (0, std::memory_order_relaxed);
+            heldNotes[1].store (0, std::memory_order_relaxed);
+        }
 
         /*
          * 65 and 5 are General MIDI's own portamento switch and portamento time, so a
