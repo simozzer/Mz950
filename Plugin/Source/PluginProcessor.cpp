@@ -866,6 +866,17 @@ void VirtualS950Processor::setStateInformation (const void* data, int size)
     const int index = programNames.indexOf (wantedProgram);
 
     selectProgram (index >= 0 ? index : savedIndex);
+
+    /*
+     * A Synth-tab disk saved before v0.5.0 was written with the zone tuning read the old way
+     * - whole semitones plus 256ths, where the machine counts sixteenths - so it plays out of
+     * tune: a 5-cent detune comes back nearly a semitone flat, an octave sixteen semitones
+     * out. It is rendered again from the recipe saved beside it, which writes the tuning the
+     * right way and keeps every setting a render keeps. Only a disk carrying exactly the old
+     * bytes is redone; tuning set by hand on the Program tab is left as it is.
+     */
+    if (synthDisk && disk != nullptr && s950::synth::hasOldTuning (recipe, *disk))
+        setRecipe (recipe);
 }
 
 // ---------------------------------------------------------------------------- disks

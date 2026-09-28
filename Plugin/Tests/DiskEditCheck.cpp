@@ -533,6 +533,25 @@ int main (int argc, char** argv)
         ++checks; if (groups[0].zone1.pitchOffset() != -1.0 / 16) fail ("synth", "OSC1 plays a sixteenth flat", (int) (groups[0].zone1.pitchOffset() * 16), -1);
         ++checks; if (groups[1].zone1.pitchOffset() !=  1.0 / 16) fail ("synth", "OSC2 plays a sixteenth sharp", (int) (groups[1].zone1.pitchOffset() * 16), 1);
 
+        // A disk from before v0.5.0 is spotted, so a saved project can render it again - and
+        // one written the new way, or tuned by hand, is not.
+        {
+            ++checks; if (hasOldTuning (r, d)) fail ("synth", "a new disk is not taken for an old one", 1, 0);
+
+            Disk old = d;
+            const Disk::Entry* p = old.find ("FAT SAW", 'P');
+            old.setKeygroupParam (*p, 0, KeygroupParam::Zone1Transpose, -1);    // -4 cents, the old way
+            old.setKeygroupParam (*p, 0, KeygroupParam::Zone1Fine,      246);
+            old.setKeygroupParam (*p, 1, KeygroupParam::Zone1Transpose, 0);     // +4 cents, the old way
+            old.setKeygroupParam (*p, 1, KeygroupParam::Zone1Fine,      10);
+            ++checks; if (! hasOldTuning (r, old)) fail ("synth", "a pre-0.5.0 synth disk is spotted", 0, 1);
+
+            Disk byHand = old;
+            const Disk::Entry* q = byHand.find ("FAT SAW", 'P');
+            byHand.setKeygroupParam (*q, 1, KeygroupParam::Zone1Fine, 32);       // somebody retuned OSC2
+            ++checks; if (hasOldTuning (r, byHand)) fail ("synth", "a hand-tuned disk is left alone", 1, 0);
+        }
+
         // the drums: one key each on GM's notes, constant pitch, one-shot, and the ride left out
         bool sawRide = false;
         for (std::size_t k = 2; k < groups.size(); ++k)

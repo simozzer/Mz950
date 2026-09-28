@@ -121,6 +121,16 @@ namespace s950::synth
     /// The recipe as a disk. `previous` is the disk this replaces, for the settings it keeps.
     bool render (const Recipe& recipe, WaveCache& cache, const Disk* previous, Disk& out, std::string& error);
 
+    /*
+     * Whether `disk` was rendered from `recipe` before v0.5.0 fixed how a zone's tuning is
+     * written: some oscillator's transpose and fine hold exactly what the old writer put
+     * there (whole semitones plus 256ths) for a setting where that differs from the right
+     * bytes (sixteenths) - and none holds anything else. Such a disk plays detuned, and
+     * rendering it again from the recipe corrects it without touching the settings a render
+     * keeps. A tuning set by hand on the Program tab matches neither, so it is left alone.
+     */
+    bool hasOldTuning (const Recipe& recipe, const Disk& disk);
+
     /// The recipe as text and back, for the plugin's saved state. One line, key=value pairs.
     std::string toText (const Recipe& r);
     Recipe      fromText (const std::string& text);

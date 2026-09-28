@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "NativeFileDialog.h"
 
 #include <algorithm>
 
@@ -737,31 +738,27 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
      */
     sendLookAndFeelChange();
 
-    // Big enough to hold the file browser, which opens inside this window rather than as a
-    // dialog of its own - see openDisk.
-    // 120 taller than it was, for the LFO row: 108 for the knobs and 12 to stand them off
-    // the row above.
-    setSize (720, 720);
+    // Sized for the controls. It used to be 720 x 720 so the file browser could open inside
+    // it; the system dialog now opens outside, on top of it - see openDisk.
+    setSize (640, 640);
     startTimerHz (10);
 }
 
 /*
- * Pick an image.
+ * Pick an image, in the Windows file dialog - owned by this plugin window.
  *
- * The browser opens INSIDE this window rather than as a native dialog, and that is the
- * whole point of it. JUCE puts a native chooser on the primary display:
+ * Not JUCE's native chooser, which puts itself on the primary display:
  *
  *     auto mainMon = Desktop::getInstance().getDisplays().getPrimaryDisplay()->userBounds;
  *     setBounds (mainMon.getX() + mainMon.getWidth() / 4, ...)
  *
  * On a machine with two monitors six thousand pixels apart, a plugin on the second one
- * opened its file dialog on the first, where nobody was looking. From the DAW it was
- * indistinguishable from a button that did nothing.
+ * opened its file dialog on the first, where nobody was looking - and a host that keeps
+ * plugin windows always on top could cover it. For a while the answer was a JUCE browser
+ * inside this window, which could do neither but was small and unfamiliar.
  *
- * Parenting the browser into the editor removes the whole class of problem rather than that
- * one instance of it: it cannot land on another screen, it cannot hide behind a DAW window
- * that is always on top, and it cannot take focus away from the host. The cost is that it
- * looks like JUCE rather than like Windows, which for a plugin is the right way round.
+ * nativeDialog owns the system dialog to this window's top-level ancestor, so Windows keeps
+ * it above the plugin window, topmost or not, and centres it on whichever monitor that is.
  *
  * Either container: a plain sector image, or the .hfe that archived floppies come in.
  */
@@ -802,19 +799,10 @@ void VirtualS950Editor::openDisk()
     if (! start.isDirectory())
         start = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
 
-    chooser = std::make_unique<juce::FileChooser> ("Open an Akai S950 disk image",
-                                                   start,
-                                                   "*.hfe;*.img",
-                                                   false,      // not the OS dialog - see above
-                                                   false,
-                                                   this);      // live in this window
-
-    const auto flags = juce::FileBrowserComponent::openMode
-                     | juce::FileBrowserComponent::canSelectFiles;
-
-    chooser->launchAsync (flags, [this] (const juce::FileChooser& fc)
+    nativeDialog::chooseFileToOpen (*this, "Open an Akai S900/S950 disk image", start,
+                                    { "Akai S900/S950 disk images (*.hfe, *.img)", "*.hfe;*.img" },
+                                    [this] (const juce::File& file)
     {
-        const auto file = fc.getResult();
         if (file == juce::File()) return;
 
         //
@@ -830,10 +818,12 @@ void VirtualS950Editor::openDisk()
 
         if (! processor.loadDisk (file, error))
         {
+            // Owned by this window, like the dialog, so it lands where the plugin is.
             juce::NativeMessageBox::showMessageBoxAsync (
                 juce::MessageBoxIconType::WarningIcon,
                 "Could not open that disk",
-                error);
+                error,
+                this);
             return;
         }
 
@@ -1044,20 +1034,22 @@ void VirtualS950Editor::resized()
      * Only the header is narrowed by it. Everything below gets the whole width, which the
      * Program tab's rows of keygroup controls need.
      */
-    auto head = r.removeFromTop (112);
-    auto gainCell = head.removeFromRight (96);
+    auto head = r.removeFromTop (106);
+    // The same size as every other knob now, level with the disk row rather than the title.
+    auto gainCell = head.removeFromRight (68);
     gainLabel.setBounds (gainCell.removeFromBottom (14));
-    gain.setBounds (gainCell.withTrimmedTop (4));
+    gain.setBounds (gainCell.withTrimmedTop (26).withTrimmedBottom (2));
     head.removeFromRight (16);
 
-    head.removeFromTop (48);                    // the title painted above
+    head.removeFromTop (44);                    // the title painted above
     auto row = head.removeFromTop (26);
     loadButton.setBounds (row.removeFromLeft (104));
     row.removeFromLeft (8);
     programs.setBounds (row);
 
-    head.removeFromTop (10);
-    mainTabs.setBounds (head.removeFromTop (28).withWidth (300));
+    head.removeFromTop (8);
+    // The whole width of the disk row, so the tab bar's rule ends where the programme box does.
+    mainTabs.setBounds (head.removeFromTop (28));
 
     r.removeFromTop (10);
 
@@ -1081,10 +1073,12 @@ void VirtualS950Editor::resized()
      *   row 2   GLIDE & POLYPHONY | WIDE           the extras, violet
      *   row 3   VCA ENVELOPE | VCF ENVELOPE        the offsets again, as shapes
      *
-     * One knob cell is 78 wide; a panel is its knobs plus padding, and the rows share the
-     * width in proportion to what they hold, so nothing is stretched to fill.
+     * One knob cell is 68 wide; a panel is its knobs plus padding, and the rows share the
+     * width in proportion to what they hold, so nothing is stretched to fill. The knobs
+     * were 84 x 104 while the file browser opened inside this window and needed the room;
+     * with the system dialog outside it, they are sized for the controls alone.
      */
-    constexpr int cellW = 84, cellH = 104, gap = 10;
+    constexpr int cellW = 68, cellH = 80, gap = 10;
     const int headroom = look::Panel::headerHeight + 8;
 
     /// A knob and its caption in one cell, the caption under the value.
@@ -1121,15 +1115,24 @@ void VirtualS950Editor::resized()
             placeKnob (cells[i], *mine[i]->slider, *mine[i]->label);
     };
 
-    // --- row 1: the offsets, in three panels sized to what they hold - one, three and two
-    auto row1 = r.removeFromTop (cellH + headroom);
-    const int unit = (row1.getWidth() - 2 * gap) / 6;
+    /*
+     * Every row splits at the same centre gutter, so the panels line up down the page:
+     * FILTER and VELOCITY (one knob and two) on the left, the LFO's three on the right;
+     * glide beside wide; the two envelopes. Before, row 1 split in sixths and the others in
+     * half, and no edge lined up with any other.
+     */
+    const int half = (r.getWidth() - gap) / 2;
 
-    filterPanel.setBounds (row1.removeFromLeft (unit));
-    row1.removeFromLeft (gap);
-    velocityPanel.setBounds (row1.removeFromRight (unit * 2));
-    row1.removeFromRight (gap);
-    lfoPanel.setBounds (row1);
+    // --- row 1: the offsets - FILTER and VELOCITY on the left, in the ratio of their knobs
+    auto row1 = r.removeFromTop (cellH + headroom);
+    {
+        auto left = row1.removeFromLeft (half);
+        row1.removeFromLeft (gap);
+        filterPanel.setBounds (left.removeFromLeft ((left.getWidth() - gap) / 3));
+        left.removeFromLeft (gap);
+        velocityPanel.setBounds (left);
+        lfoPanel.setBounds (row1);
+    }
 
     placeGroup (filterPanel,   "SAMPLE");
     placeGroup (lfoPanel,      "LFO");
@@ -1139,7 +1142,7 @@ void VirtualS950Editor::resized()
     r.removeFromTop (gap);
     auto row2 = r.removeFromTop (cellH + headroom);
 
-    glidePanel.setBounds (row2.removeFromLeft (unit * 3));
+    glidePanel.setBounds (row2.removeFromLeft (half));
     row2.removeFromLeft (gap);
     widePanel.setBounds (row2);
 
@@ -1162,7 +1165,7 @@ void VirtualS950Editor::resized()
     r.removeFromTop (gap);
     auto row3 = r;
 
-    vcaPanel.setBounds (row3.removeFromLeft (row3.getWidth() / 2 - gap / 2));
+    vcaPanel.setBounds (row3.removeFromLeft (half));
     row3.removeFromLeft (gap);
     vcfPanel.setBounds (row3);
 
@@ -1173,9 +1176,10 @@ void VirtualS950Editor::resized()
         auto side = area.removeFromRight (cellW);
         area.removeFromRight (6);
 
+        // the Amount knob halfway down beside its envelope, not stuck to the top
         for (auto& k : knobs)
             if (juce::String (k.group) == "VCF")
-                placeKnob (side.removeFromTop (cellH), *k.slider, *k.label);
+                placeKnob (side.withSizeKeepingCentre (cellW, cellH), *k.slider, *k.label);
 
         vcfEnvelope.setBounds (area);
     }

@@ -1,4 +1,5 @@
 #include "ProgramPage.h"
+#include "NativeFileDialog.h"
 
 using s950::KeygroupParam;
 using s950::KeygroupParamInfo;
@@ -599,18 +600,13 @@ void ProgramPage::saveDisk()
     const auto folder = start.existsAsFile() ? start.getParentDirectory()
                                              : juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
 
-    // In this window rather than as a native dialog, for the reason openDisk gives.
-    chooser = std::make_unique<juce::FileChooser> ("Save the disk, with its edits, as an image",
-                                                   folder.getChildFile (name + "-edited.img"),
-                                                   "*.img", false, false, this);
-
-    const auto mode = juce::FileBrowserComponent::saveMode
-                    | juce::FileBrowserComponent::canSelectFiles
-                    | juce::FileBrowserComponent::warnAboutOverwriting;
-
-    chooser->launchAsync (mode, [this] (const juce::FileChooser& fc)
+    // The Windows dialog, owned by the plugin window - for the reason openDisk gives.
+    nativeDialog::chooseFileToSave (*this, "Save the disk, with its edits, as an image",
+                                    folder.getChildFile (name + "-edited.img"),
+                                    { "Akai S900/S950 disk image (*.img)", "*.img" }, "img",
+                                    [this] (const juce::File& chosen)
     {
-        auto file = fc.getResult();
+        auto file = chosen;
         if (file == juce::File()) return;
 
         if (! file.hasFileExtension ("img"))
@@ -619,7 +615,7 @@ void ProgramPage::saveDisk()
         juce::String error;
         if (! processor.saveDiskAs (file, error))
             juce::NativeMessageBox::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
-                                                         "Could not save the disk", error);
+                                                         "Could not save the disk", error, this);
     });
 }
 
@@ -668,12 +664,17 @@ void ProgramPage::resized()
     r = inner;
 
     /*
-     * The page's controls in rows of cells, left to right. The filter envelope starts a row
-     * of its own on the Envelopes page, so the two envelopes read as two envelopes.
+     * The page's controls in rows of cells. The filter envelope starts a row of its own on
+     * the Envelopes page, so the two envelopes read as two envelopes.
+     *
+     * The rows are laid out first and then placed as one block, centred in the panel both
+     * ways, so a page of four knobs does not sit in the top-left corner of a panel sized for
+     * fourteen. Every row starts at the block's left edge, so columns still line up.
      */
-    const int cellW = 84, cellH = 118, gap = 6;
-    int x = r.getX(), y = r.getY();
+    const int cellW = 72, cellH = 92, colGap = 14, rowGap = 10;
+    const int perRow = juce::jmax (1, (r.getWidth() + colGap) / (cellW + colGap));
 
+    std::vector<std::vector<Control*>> rows (1);
     for (auto& c : controls)
     {
         if (c->page != page) continue;
@@ -682,18 +683,36 @@ void ProgramPage::resized()
         // the two zones' tuning - so each page reads as its groups, not as a queue of knobs.
         const bool newRow = (c->param == KeygroupParam::VcfAttack)
                          || (c->param == KeygroupParam::WarpDepth)
-                         || (x + cellW > r.getRight());
-        if (newRow && x != r.getX()) { x = r.getX(); y += cellH + gap; }
+                         || (static_cast<int> (rows.back().size()) >= perRow);
+        if (newRow && ! rows.back().empty()) rows.emplace_back();
+        rows.back().push_back (c.get());
+    }
 
-        juce::Rectangle<int> cell (x, y, cellW, cellH);
+    int columns = 0;
+    for (const auto& row : rows) columns = juce::jmax (columns, static_cast<int> (row.size()));
+    if (columns == 0) return;
 
-        c->sounding->setBounds (cell.removeFromBottom (14));
-        c->label->setBounds (cell.removeFromBottom (14));
+    const int blockW = columns * cellW + (columns - 1) * colGap;
+    const int blockH = static_cast<int> (rows.size()) * cellH + (static_cast<int> (rows.size()) - 1) * rowGap;
+    const int left   = r.getX() + juce::jmax (0, (r.getWidth()  - blockW) / 2);
+    int       y      = r.getY() + juce::jmax (0, (r.getHeight() - blockH) / 2);
 
-        if (c->slider != nullptr) c->slider->setBounds (cell.reduced (2));
-        if (c->toggle != nullptr) c->toggle->setBounds (cell.withSizeKeepingCentre (70, 24));
-        if (c->combo  != nullptr) c->combo->setBounds (cell.withSizeKeepingCentre (80, 26));
+    for (const auto& row : rows)
+    {
+        int x = left;
+        for (auto* c : row)
+        {
+            juce::Rectangle<int> cell (x, y, cellW, cellH);
 
-        x += cellW + gap;
+            c->sounding->setBounds (cell.removeFromBottom (14));
+            c->label->setBounds (cell.removeFromBottom (14));
+
+            if (c->slider != nullptr) c->slider->setBounds (cell.reduced (2));
+            if (c->toggle != nullptr) c->toggle->setBounds (cell.withSizeKeepingCentre (70, 24));
+            if (c->combo  != nullptr) c->combo->setBounds (cell.withSizeKeepingCentre (72, 26));
+
+            x += cellW + colGap;
+        }
+        y += cellH + rowGap;
     }
 }

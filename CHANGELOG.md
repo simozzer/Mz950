@@ -6,6 +6,44 @@ Every number here came off a recording of a real S950 rather than out of a manua
 a change is a measurement it says what was measured and what it replaced. Where it is an
 assumption it says that too — those are the ones another afternoon with a recorder settles.
 
+## Unreleased
+
+### Load disk opens the Windows file dialog, on the plugin's monitor and on top of it
+
+The plugin's **Load disk** (and the Program tab's **Save disk**) used to open JUCE's file
+browser inside the plugin window - small and unfamiliar, but the only way round two faults of
+JUCE's native dialog: it opened on the primary monitor whatever screen the plugin was on, and
+a host that keeps plugin windows always on top could cover it. Both now open the Windows file
+dialog, owned by the plugin window, so Windows keeps it above that window - topmost or not -
+and opens it on the same monitor. Checked on two monitors with the standalone set always on
+top: the dialog came up on the second monitor, owned by the plugin window, above it. The
+"could not open/save" messages are owned the same way. If the Windows dialog cannot be shown,
+the old in-window browser is still there as a fallback.
+
+### A smaller window, smaller knobs, and pages that line up
+
+With the file browser no longer opening inside it, the window drops from 720 x 720 to 640 x 640
+and the knobs from about 70 px to 50, the gain knob included.
+
+- **Perform:** every row now splits at the same centre gutter, so the panels line up down the
+  page - FILTER and VELOCITY on the left of the first row, the LFO on the right. The VCF
+  envelope's Amount knob sits halfway down beside it rather than at its top.
+- **Program:** each page's controls are laid out as one block centred in the panel, rather
+  than in its top-left corner; columns still line up from row to row.
+- **Synth:** the knob rows share the page's height, so the drums panel reaches the bottom, and
+  the drum's switch and knobs spread across the panel like the pads above them.
+- The tab bar's rule runs the width of the disk row.
+
+### Synth disks saved before v0.5.0 are put back in tune when a project opens
+
+v0.5.0 corrected how a zone's tuning is read and written, which left Synth-tab disks rendered
+before it - and saved inside projects - playing out of tune: a 5-cent detune came back almost
+a semitone flat. When a project opens with such a disk it is now rendered again from the Synth
+settings saved beside it, which writes the tuning the right way and keeps every setting a
+render keeps. It happens only for a disk carrying exactly the old bytes; tuning set by hand on
+the Program tab is left alone. Checked in DiskEditCheck (an old disk spotted, a new one and a
+hand-tuned one not) and on the standalone's own saved state, which came back in tune.
+
 ## v0.5.1 — 2026-09-27
 
 High-density disks, and 48 kHz samples kept at 48 kHz on import.

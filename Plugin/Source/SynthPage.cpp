@@ -289,8 +289,16 @@ void SynthPage::resized()
     hint.setBounds (r.removeFromTop (16));
     r.removeFromTop (8);
 
-    constexpr int gap = 10, cellH = 100;
+    constexpr int gap = 10;
     const int headroom = look::Panel::headerHeight + 8;
+
+    /*
+     * Three rows of knobs on this page - two in each oscillator and one for the drums - and
+     * they share whatever height the page has, so the drums panel ends at the bottom rather
+     * than leaving a band of nothing under it. At least 76, which is what a knob needs.
+     */
+    const int fixedH = (headroom + 26 + 6) + gap + (headroom + 28 + 8);
+    const int cellH  = juce::jlimit (76, 96, (r.getHeight() - fixedH) / 3);
 
     // --- three oscillators side by side, each a combo over two rows of three knobs
     auto row = r.removeFromTop (headroom + 26 + 6 + 2 * cellH);
@@ -343,10 +351,16 @@ void SynthPage::resized()
 
     inside.removeFromTop (8);
     auto knobs = inside.removeFromTop (cellH);
-    drumOn.setBounds (knobs.removeFromLeft (84).withSizeKeepingCentre (70, 24));
-    const int w = 84;
-    placeKnob (knobs.removeFromLeft (w), tune,  tuneL);
-    placeKnob (knobs.removeFromLeft (w), decay, decayL);
-    placeKnob (knobs.removeFromLeft (w), tone,  toneL);
-    placeKnob (knobs.removeFromLeft (w), level, levelL);
+
+    // The chosen drum's switch and four knobs, spread evenly across the panel like the pads
+    // above them rather than bunched at its left - each knob its own size in its cell.
+    const int n = 5, cellW = knobs.getWidth() / n;
+    auto cellAt = [&] (int i) { return juce::Rectangle<int> (knobs.getX() + i * cellW, knobs.getY(), cellW, knobs.getHeight()); };
+    auto knobIn = [] (juce::Rectangle<int> c) { return c.withSizeKeepingCentre (juce::jmin (c.getWidth(), 68), c.getHeight()); };
+
+    drumOn.setBounds (cellAt (0).withSizeKeepingCentre (70, 24));
+    placeKnob (knobIn (cellAt (1)), tune,  tuneL);
+    placeKnob (knobIn (cellAt (2)), decay, decayL);
+    placeKnob (knobIn (cellAt (3)), tone,  toneL);
+    placeKnob (knobIn (cellAt (4)), level, levelL);
 }

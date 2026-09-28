@@ -149,7 +149,6 @@ private:
     int  count    = 0;
     bool updating = false;       // filling the controls must not look like turning them
 
-    std::unique_ptr<juce::FileChooser> chooser;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ProgramPage)
 };

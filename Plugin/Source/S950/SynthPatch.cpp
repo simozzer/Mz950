@@ -510,6 +510,46 @@ namespace s950::synth
         return all;
     }
 
+    bool hasOldTuning (const Recipe& recipe, const Disk& disk)
+    {
+        const Disk::Entry* program = nullptr;
+        for (const auto& e : disk.getEntries())
+            if (e.type == 'P' && e.name == Disk::normaliseNameFor (recipe.name)) program = &e;
+        if (program == nullptr) return false;
+
+        bool sawOld = false;
+
+        for (const auto& k : disk.keygroups (*program))
+        {
+            const auto& name = k.zone1.name;
+            if (name.size() != 4 || name.compare (0, 3, "OSC") != 0) continue;
+            const int i = name[3] - '1';
+            if (i < 0 || i > 2) continue;
+
+            const auto& o     = recipe.osc[i];
+            const int   cents = std::max (-50, std::min (50, o.fine));
+
+            // what the writer put there before v0.5.0: whole semitones, then 256ths upward
+            const int fine256  = static_cast<int> (std::llround (std::abs (cents) * 2.56));
+            const int oldHigh  = o.octave * 12 - (cents < 0 ? 1 : 0);
+            const int oldLow   = cents < 0 ? 256 - fine256 : fine256;
+
+            // what it writes now, and what the machine reads: sixteenths, in one number
+            const int sixteenths = o.octave * 12 * 16 + static_cast<int> (std::lround (cents * 16.0 / 100.0));
+            const int newHigh    = sixteenths >= 0 ? sixteenths / 256 : -((255 - sixteenths) / 256);
+            const int newLow     = sixteenths - newHigh * 256;
+
+            if (oldHigh == newHigh && (oldLow & 0xFF) == newLow) continue;     // the same bytes either way
+
+            if (k.zone1.transpose == oldHigh && k.zone1.fine == (oldLow & 0xFF))
+                sawOld = true;
+            else if (! (k.zone1.transpose == newHigh && k.zone1.fine == newLow))
+                return false;          // tuned by hand: not ours to redo
+        }
+
+        return sawOld;
+    }
+
     // ---------------------------------------------------------------- as text
 
     std::string toText (const Recipe& r)
