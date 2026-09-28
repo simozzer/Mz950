@@ -6,7 +6,10 @@ Every number here came off a recording of a real S950 rather than out of a manua
 a change is a measurement it says what was measured and what it replaced. Where it is an
 assumption it says that too — those are the ones another afternoon with a recorder settles.
 
-## Unreleased
+## v0.5.2 — 2026-09-28
+
+The Windows file dialog, a smaller window with a balanced layout, and old Synth-tab disks put
+back in tune.
 
 ### Load disk opens the Windows file dialog, on the plugin's monitor and on top of it
 
