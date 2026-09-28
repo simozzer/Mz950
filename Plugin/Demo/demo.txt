@@ -1,0 +1,76 @@
+# Mz950 demo video - the script record-demo.ps1 runs in the standalone.
+#
+# Times are seconds on the audio clock, from the white sync flash; the recorder trims the
+# flash off, so they are also (very nearly) seconds into the finished video. Paths are
+# relative to this folder unless absolute. The two library disks are not in the repository:
+# point these at your own copies.
+#
+# Commands: see the top of Plugin/Source/Demo.h.
+
+setup load     C:\Users\simon\AkaiS950Images\DSKA0039.hfe
+setup program  GRAND1
+setup tab      program
+setup keygroup 1
+setup page     envelopes
+setup set      gain 0.55          # the sections' levels, balanced by ear against each other;
+lead 3                            # the recorder then brings the whole to a -1 dB peak
+
+# ---------------------------------------------------------------- 1. a disk, played
+at 0.3   caption "Mz950 - plays Akai S900/S950 disk images, as a VST3 and standalone" 4.5
+at 0.5   midi house-piano.mid
+at 5.0   caption "DSKA0039, programme GRAND1: an S950 piano, straight from the disk image"
+at 10.0  caption "Program tab: every keygroup, over the keys it plays - played keys get a blue dot"
+at 10.0  keygroup all
+at 13.0  keygroup 3
+at 15.5  keygroup 5
+at 15.5  page filter
+at 18.0  keygroup all
+at 18.0  page envelopes
+
+# ---------------------------------------------------------------- 2. performing on top of it
+at 21.0  tab perform
+at 21.0  caption "Perform tab: live offsets on top of the disk - never written to it"
+at 21.5  midi house-piano.mid
+at 23.0  ramp vcfCutoff 0 -45 4
+at 27.0  caption "Filter offset: close it down... and open it up"
+at 27.5  ramp vcfCutoff -45 30 5
+at 33.0  ramp vcfCutoff 30 0 1.5
+at 33.5  caption "LFO depth: vibrato, as the S950's own LFO"
+at 33.5  set lfoRate 50
+at 33.5  ramp lfoDepth 0 40 2.5
+at 38.5  ramp lfoDepth 40 0 1.5
+at 41.5  notesoff
+
+# ---------------------------------------------------------------- 3. glide and mono
+at 42.0  load C:\Users\simon\AkaiS950Images\DSKA0050.hfe
+at 42.2  program "MOOG BASS2"
+at 42.5  caption "Glide and mono - not on the S950, added for playing basslines"
+at 42.5  set gain 1.3                 # the bass is ten decibels quieter than the piano
+at 42.5  set voices 1
+at 42.5  set glide 1
+at 42.5  set glideTime 90
+at 43.0  midi bassline.mid
+at 51.0  caption "A longer glide"
+at 51.0  ramp glideTime 90 350 1.5
+at 60.5  notesoff
+at 60.5  set glide 0
+at 60.5  set voices 8
+at 60.5  set glideTime 120
+at 60.5  set gain 0.22                # the synth and its drums are by far the hottest; the
+                                      # engine stops at full scale, so this keeps under it
+
+# ---------------------------------------------------------------- 4. the Synth tab
+at 61.0  tab synth
+at 61.0  caption "Synth tab: oscillators and a drum kit, rendered as a real S950 disk"
+at 61.2  preset "FM e-piano"
+at 61.4  drums on
+at 63.0  midi house-piano.mid
+at 63.0  midi house-drums.mid
+at 70.0  caption "Change the sound and the disk re-renders in the background"
+at 72.0  preset "PWM strings"
+at 76.0  caption "Save it, and a real S950 loads it"
+at 82.5  notesoff
+
+# ---------------------------------------------------------------- the end
+at 83.0  caption "Mz950  -  github.com/simozzer/Mz950  -  not affiliated with Akai or inMusic" 6
+end 89

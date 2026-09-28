@@ -48,3 +48,6 @@ obj/
 
 # vscode seetings
 .vscode/
+
+# demo-mode recordings (Plugin/Demo/record-demo.ps1)
+Plugin/Demo/out/

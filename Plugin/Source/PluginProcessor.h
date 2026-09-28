@@ -5,6 +5,7 @@
 #include "S950/Engine.h"
 #include "S950/Disk.h"
 #include "S950/SynthPatch.h"
+#include "Demo.h"
 
 #include <atomic>
 #include <cstdint>
@@ -185,6 +186,10 @@ public:
 
     /// Whether a key is held down over MIDI right now - for the dots on the Program tab's
     /// keyboard. Written on the audio thread, read on the message thread, one bit a key.
+    /// Demo mode's audio half - scheduled MIDI in, rendered audio out. Idle unless the
+    /// standalone was started with --demo. See Demo.h.
+    demo::Tap demoTap;
+
     bool isNoteHeld (int note) const
     {
         if (note < 0 || note > 127) return false;

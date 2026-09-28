@@ -263,5 +263,18 @@ private:
      */
     juce::TooltipWindow tooltips { this, 600 };
 
+    /*
+     * DEMO MODE (standalone only, "--demo script.txt"): the director that runs the script,
+     * and the white frame it flashes for the recorder to sync on. Last, so the director goes
+     * first - its hooks reach into the pages above. See Demo.h.
+     */
+    struct FlashCover : juce::Component
+    {
+        void paint (juce::Graphics& g) override { g.fillAll (juce::Colours::white); }
+    };
+    FlashCover flashCover;
+    std::unique_ptr<demo::Director> director;
+    void startDemoIfAsked();
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VirtualS950Editor)
 };

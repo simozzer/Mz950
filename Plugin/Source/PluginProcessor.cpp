@@ -524,6 +524,9 @@ void VirtualS950Processor::processBlock (juce::AudioBuffer<float>& buffer,
     if (engine == nullptr || count <= 0)
         return;
 
+    // Demo mode only (see Demo.h): the script's notes, at their samples, among the host's.
+    demoTap.addDueMidi (midi, count);
+
     engine->gain.store (gainParameter != nullptr ? gainParameter->load() : 0.7f,
                         std::memory_order_relaxed);
 
@@ -731,6 +734,9 @@ void VirtualS950Processor::processBlock (juce::AudioBuffer<float>& buffer,
 
     for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
         buffer.copyFrom (ch, 0, ch == 1 ? rightScratch : leftScratch, count);
+
+    // Demo mode only: what was just rendered, into the recording.
+    demoTap.capture (buffer, count);
 }
 
 // ------------------------------------------------------------------------- the state

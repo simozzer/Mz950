@@ -740,8 +740,72 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
 
     // Sized for the controls. It used to be 720 x 720 so the file browser could open inside
     // it; the system dialog now opens outside, on top of it - see openDisk.
-    setSize (640, 640);
+    // 672 tall rather than 640 since the Program tab's keyboard: two rows of knobs and the
+    // "no filter envelope" note under them need the room, or the note sits on the captions.
+    setSize (640, 672);
     startTimerHz (10);
+
+    addChildComponent (flashCover);
+    flashCover.setInterceptsMouseClicks (false, false);
+    startDemoIfAsked();
+}
+
+/*
+ * Demo mode: the standalone, started with "--demo script.txt", runs that script for a
+ * recording - see Demo.h and Plugin/Demo/record-demo.ps1. A plugin in a host never has a
+ * command line of its own, so only the standalone ever looks.
+ */
+void VirtualS950Editor::startDemoIfAsked()
+{
+    if (processor.wrapperType != juce::AudioProcessor::wrapperType_Standalone) return;
+
+    auto* app = juce::JUCEApplicationBase::getInstance();
+    if (app == nullptr) return;
+
+    juce::StringArray args;
+    args.addTokens (app->getCommandLineParameters(), " ", "\"");
+    const int at = args.indexOf ("--demo");
+    if (at < 0 || at + 1 >= args.size()) return;
+
+    const juce::File script (args[at + 1].unquoted());
+    if (! script.existsAsFile()) return;
+
+    demo::Hooks hooks;
+    hooks.showTab = [this] (int t) { mainTabs.setCurrentTabIndex (t); };
+    hooks.loadDisk = [this] (const juce::File& f)
+    {
+        juce::String error;
+        const bool ok = processor.loadDisk (f, error);
+        refreshPrograms();
+        programPage.refresh();
+        return ok;
+    };
+    hooks.selectProgram = [this] (const juce::String& name)
+    {
+        // Trimmed: the disk pads some names with spaces ("    GRAND1").
+        const auto names = processor.getProgramNames();
+        int i = -1;
+        for (int n = 0; n < names.size() && i < 0; ++n)
+            if (names[n].trim().equalsIgnoreCase (name.trim())) i = n;
+        if (i < 0) return false;
+        programs.setSelectedId (i + 1, juce::sendNotificationSync);
+        return true;
+    };
+    hooks.chooseKeygroup  = [this] (int k) { programPage.showKeygroup (k); };
+    hooks.showProgramPage = [this] (const juce::String& name) { return programPage.showPageNamed (name); };
+    hooks.choosePreset    = [this] (const juce::String& name) { return synthPage.choosePreset (name); };
+    hooks.setDrums        = [this] (bool on) { synthPage.setDrums (on); };
+    hooks.flash = [this]
+    {
+        flashCover.setBounds (getLocalBounds());
+        flashCover.setVisible (true);
+        flashCover.toFront (false);
+        juce::Component::SafePointer<juce::Component> safe (&flashCover);
+        juce::Timer::callAfterDelay (120, [safe] { if (safe != nullptr) safe->setVisible (false); });
+    };
+
+    director = std::make_unique<demo::Director> (processor, processor.parameters, processor.demoTap,
+                                                 std::move (hooks), script);
 }
 
 /*

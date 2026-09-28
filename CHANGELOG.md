@@ -6,7 +6,10 @@ Every number here came off a recording of a real S950 rather than out of a manua
 a change is a measurement it says what was measured and what it replaced. Where it is an
 assumption it says that too — those are the ones another afternoon with a recorder settles.
 
-## Unreleased
+## v0.5.3 — 2026-09-28
+
+The Program tab's keygroups over a piano keyboard, a keygroup list, and a demo mode that
+records the standalone's own video.
 
 ### The Program tab's keygroups over a piano keyboard
 
@@ -16,6 +19,32 @@ covers. The selected keygroup's keys are shaded in the Program amber - every key
 **All keygroups** - the other keygroups' keys faintly, and keys nothing plays are left grey.
 **A key held over MIDI shows a blue dot**, ringed so it reads on an amber key or a black one.
 Clicking a key chooses the keygroup that plays it, and hovering names the key.
+
+The bars are outlines with a see-through fill, so the keys show through them - amber for the
+keygroup being edited, grey for the rest. And a keygroup is chosen from a list as well: the
+**All keygroups** button became a box listing "All keygroups" and then every keygroup by
+number, keys and sample, with **<** and **>** either side to step through them - so a drum
+kit's single-key keygroups, a few pixels wide on the strip, are as easy to reach as any.
+
+The window is 640 x 672: the keyboard needed the height, or the Program tab's "no filter
+envelope" note sat on the second row of knobs.
+
+### Demo mode: the standalone records its own video
+
+`Mz950.exe --demo script.txt` runs a timed script - load a disk, choose a programme, switch
+tabs and keygroups, move the Perform controls, pick Synth presets, play MIDI files, show
+captions - and `Plugin/Demo/record-demo.ps1` films it with ffmpeg and assembles the result:
+a captioned MP4, a clean one, the captions as an .srt, and the audio as a WAV.
+
+The audio is not taken from the sound card. The processor writes its own output to a 32-bit
+float WAV as it renders, and the script's MIDI goes in at exact sample positions, so there is
+no latency, no drift, and nothing else on the machine in the recording. The window flashes
+white at the instant the WAV starts; the recorder finds that frame and lines the film up on
+it, and every step of the script runs on the audio clock, so picture and sound stay together
+for the whole run - measured within one frame. `Plugin/Demo/demo.txt` is an 89-second tour of
+the three tabs; only the standalone ever looks for the flag. When the script ends the controls
+go back to how they were, so a recording leaves nothing behind in the standalone's settings
+(`keep` in a script leaves them as it set them).
 
 ## v0.5.2 — 2026-09-28
 

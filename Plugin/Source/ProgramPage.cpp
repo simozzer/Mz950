@@ -308,11 +308,17 @@ void KeygroupStrip::paint (juce::Graphics& g)
         const bool on      = selected < 0 || selected == k;
         const bool playing = k < (int) lit.size() && lit[(size_t) k];
 
-        // Playing: the same colour, brighter, with a light rim - so which keygroup a note
-        // went to is visible whether or not it is the one being edited.
-        const auto fill = on ? selectedBar : look::raisedEdge;
-        g.setColour (playing ? fill.brighter (on ? 0.35f : 0.6f) : fill);
+        /*
+         * An outline with a see-through fill rather than a solid block, so the lanes read as
+         * spans over the keyboard instead of covering it: the edited keygroup's in amber, the
+         * others' in grey. Playing: fuller and brighter, with a light rim - so which keygroup a
+         * note went to is visible whether or not it is the one being edited.
+         */
+        const auto hue = on ? selectedBar : look::dim;
+        g.setColour (hue.withAlpha (playing ? 0.55f : (selected == k ? 0.32f : 0.16f)));
         g.fillRoundedRectangle (bar, 3.0f);
+        g.setColour (hue.withAlpha (on ? 1.0f : 0.6f));
+        g.drawRoundedRectangle (bar.reduced (0.5f), 3.0f, selected == k ? 2.0f : 1.0f);
 
         if (playing)
         {
@@ -328,7 +334,7 @@ void KeygroupStrip::paint (juce::Graphics& g)
             }
         }
 
-        g.setColour (on ? look::window : look::text);
+        g.setColour (on ? look::text : look::dim);
         g.setFont (look::bold (11.0f));
         if (bar.getWidth() > 14.0f)
             g.drawText (juce::String (k + 1), bar, juce::Justification::centred, false);
@@ -429,14 +435,26 @@ ProgramPage::ProgramPage (VirtualS950Processor& p) : processor (p)
     strip.setTooltip ("The programme's keygroups across the keyboard. Click one to edit it.");
     addAndMakeVisible (strip);
 
-    allButton.setClickingTogglesState (false);
-    look::accent (allButton, look::program);
     look::accent (saveButton, look::program);
-    allButton.setTooltip ("Edit every keygroup of the programme at once. A control then shows "
-                          "keygroup 1's value, marked * where the others differ; moving it sets "
-                          "them all to the same value.");
-    allButton.onClick = [this] { choose (selected < 0 ? 0 : -1); };
-    addAndMakeVisible (allButton);
+
+    keygroupBox.setTooltip ("Which keygroup the controls below edit. \"All keygroups\" edits every "
+                            "one at once: a control then shows keygroup 1's value, marked * where "
+                            "the others differ, and moving it sets them all to the same value.");
+    keygroupBox.onChange = [this]
+    {
+        if (updating) return;
+        const int id = keygroupBox.getSelectedId();
+        if (id > 0) choose (id == 1 ? -1 : id - 2);
+    };
+    addAndMakeVisible (keygroupBox);
+
+    // Step through the keygroups; from "All", the first step lands on the first or the last.
+    prevButton.setTooltip ("The keygroup before this one");
+    nextButton.setTooltip ("The keygroup after this one");
+    prevButton.onClick = [this] { if (count > 0) choose (selected <= 0 ? count - 1 : selected - 1); };
+    nextButton.onClick = [this] { if (count > 0) choose (selected < 0 || selected >= count - 1 ? 0 : selected + 1); };
+    addAndMakeVisible (prevButton);
+    addAndMakeVisible (nextButton);
 
     saveButton.setTooltip ("Write the disk, with every edit, as a plain .img - which the Studio, "
                            "this plugin, and a Gotek or HxC floppy emulator all open. Edits are "
@@ -615,6 +633,24 @@ void ProgramPage::showPage (int p)
     refresh();
 }
 
+void ProgramPage::fillKeygroupBox (const std::vector<KeygroupStrip::Range>& ranges)
+{
+    const juce::ScopedValueSetter<bool> filling (updating, true);
+
+    keygroupBox.clear (juce::dontSendNotification);
+    keygroupBox.addItem ("All " + juce::String (count) + " keygroups", 1);
+
+    for (int k = 0; k < (int) ranges.size(); ++k)
+    {
+        const auto& r   = ranges[(size_t) k];
+        const auto keys = r.low == r.high ? noteName (r.low) : noteName (r.low) + " - " + noteName (r.high);
+        keygroupBox.addItem (juce::String (k + 1) + "   " + keys
+                             + (r.sample.isNotEmpty() ? "   " + r.sample : juce::String()), k + 2);
+    }
+
+    keygroupBox.setSelectedId (selected < 0 ? 1 : selected + 2, juce::dontSendNotification);
+}
+
 void ProgramPage::refresh()
 {
     count = processor.getKeygroupCount();
@@ -622,7 +658,8 @@ void ProgramPage::refresh()
     const bool haveDisk = count > 0;
     emptyNote.setVisible (! haveDisk);
 
-    for (auto* c : std::initializer_list<juce::Component*> { &strip, &allButton, &saveButton,
+    for (auto* c : std::initializer_list<juce::Component*> { &strip, &keygroupBox, &prevButton,
+                                                             &nextButton, &saveButton,
                                                              &heading, &detail, &pages,
                                                              &keygroupPanel, &pagePanel })
         c->setVisible (haveDisk);
@@ -653,24 +690,21 @@ void ProgramPage::refresh()
     strip.setKeygroups (ranges);
     strip.setSelected (selected);
 
-    allButton.setToggleState (selected < 0, juce::dontSendNotification);   // the look lights it
+    fillKeygroupBox (ranges);
 
-    // --- the line under it
+    // --- the line beside it: what the choice means, since the box already says which it is
     const int k = shown();
     const bool hasHard = processor.getZoneSample (k, 2).isNotEmpty();
 
     if (selected < 0)
-        detail.setText ("All " + juce::String (count) + " keygroups   -   a change sets every one "
-                        "to the same value", juce::dontSendNotification);
+        detail.setText ("a change sets all " + juce::String (count) + " to the same value",
+                        juce::dontSendNotification);
     else
     {
         const auto soft = processor.getZoneSample (k, 1);
         const auto hard = processor.getZoneSample (k, 2);
 
-        detail.setText ("Keygroup " + juce::String (k + 1) + " of " + juce::String (count)
-                        + "   -   " + noteName (ranges[(size_t) k].low) + " to "
-                        + noteName (ranges[(size_t) k].high)
-                        + "   -   soft: " + (soft.isNotEmpty() ? soft : juce::String ("-"))
+        detail.setText ("soft: " + (soft.isNotEmpty() ? soft : juce::String ("-"))
                         + "   hard: " + (hard.isNotEmpty() ? hard : juce::String ("-")),
                         juce::dontSendNotification);
     }
@@ -794,10 +828,15 @@ void ProgramPage::resized()
     {
         auto area = keygroupPanel.content();
 
+        // < [ keygroup box ] >   what it means            Save disk as...
         auto top = area.removeFromTop (26);
         saveButton.setBounds (top.removeFromRight (112));
         top.removeFromRight (8);
-        allButton.setBounds (top.removeFromLeft (108));
+        prevButton.setBounds (top.removeFromLeft (26));
+        top.removeFromLeft (4);
+        keygroupBox.setBounds (top.removeFromLeft (230));
+        top.removeFromLeft (4);
+        nextButton.setBounds (top.removeFromLeft (26));
         top.removeFromLeft (10);
         detail.setBounds (top);
 

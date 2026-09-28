@@ -276,6 +276,25 @@ void SynthPage::timerCallback()
     status.setText (s, juce::dontSendNotification);
 }
 
+bool SynthPage::choosePreset (const juce::String& name)
+{
+    const auto& all = s950::synth::presets();
+    for (int i = 0; i < (int) all.size(); ++i)
+        if (juce::String (all[(size_t) i].name).equalsIgnoreCase (name))
+        {
+            presets.setSelectedId (i + 1, juce::sendNotificationSync);
+            return true;
+        }
+    return false;
+}
+
+void SynthPage::setDrums (bool on)
+{
+    if (drumsOn.getToggleState() == on) return;
+    drumsOn.setToggleState (on, juce::dontSendNotification);
+    push();                                    // what a click on the switch does
+}
+
 void SynthPage::resized()
 {
     auto r = getLocalBounds();

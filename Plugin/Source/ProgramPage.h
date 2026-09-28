@@ -98,6 +98,19 @@ public:
     explicit ProgramPage (VirtualS950Processor&);
     ~ProgramPage() override;
 
+    /// For demo mode: choose a keygroup (-1 for all of them), and a page by its tab's name.
+    void showKeygroup (int keygroup) { if (count > 0) choose (juce::jlimit (-1, count - 1, keygroup)); }
+    bool showPageNamed (const juce::String& name)
+    {
+        for (int i = 0; i < pages.getNumTabs(); ++i)
+            if (pages.getTabNames()[i].startsWithIgnoreCase (name))
+            {
+                pages.setCurrentTabIndex (i);
+                return true;
+            }
+        return false;
+    }
+
     /// Everything re-read from the processor: a new disk, programme, or edit.
     void refresh();
 
@@ -157,11 +170,19 @@ private:
     std::vector<std::unique_ptr<Control>> controls;
 
     /// Amber throughout: everything on this page is what is on the disk. See Look.h.
-    look::Panel keygroupPanel { "KEYGROUPS", look::program, "click one to edit it" };
+    look::Panel keygroupPanel { "KEYGROUPS", look::program, "choose one above, or click a bar or a key" };
     look::Panel pagePanel     { "", look::program };
 
     KeygroupStrip        strip;
-    juce::TextButton     allButton  { "All keygroups" };
+
+    /*
+     * Which keygroup to edit, by name as well as by clicking: "All keygroups", then each one
+     * with its keys and sample. A drum kit's single-key keygroups are a few pixels wide on the
+     * strip, and a list reaches every one of them. The arrows step through them in order.
+     */
+    juce::ComboBox       keygroupBox;
+    juce::TextButton     prevButton { "<" }, nextButton { ">" };
+    void fillKeygroupBox (const std::vector<KeygroupStrip::Range>& ranges);
     juce::TextButton     saveButton { "Save disk as..." };
     juce::Label          heading, detail, blankNote, emptyNote;
     juce::TabbedButtonBar pages { juce::TabbedButtonBar::TabsAtTop };

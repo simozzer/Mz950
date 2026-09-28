@@ -99,6 +99,7 @@ target_sources(VirtualS950 PRIVATE
     Source/SynthPage.cpp
     Source/Look.cpp
     Source/NativeFileDialog.cpp
+    Source/Demo.cpp
     Source/S950/Voice.cpp
     Source/S950/Engine.cpp
     Source/S950/Disk.cpp

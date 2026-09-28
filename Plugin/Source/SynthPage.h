@@ -26,6 +26,10 @@ public:
 
     void resized() override;
 
+    /// For demo mode: choose a preset by name, and switch the drum kit, as a click would.
+    bool choosePreset (const juce::String& name);
+    void setDrums (bool on);
+
 private:
     void timerCallback() override;
 
