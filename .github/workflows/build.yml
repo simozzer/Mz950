@@ -16,7 +16,7 @@ name: build
 
 on:
   push:
-    branches: [main]
+    branches: [main, macos]
     tags: ['v*']
   pull_request:
     branches: [main]
@@ -128,6 +128,21 @@ jobs:
         shell: pwsh
         run: .\AkaiS950Synth\build.ps1 -To Installer\staging\Disks
 
+      #
+      # The Mac job below cannot make either of these - the disks come from the C# synth
+      # and the icon from a browser rasterising two SVGs, both Windows-side - so it takes
+      # them from here, and the two platforms ship the same library and the same face.
+      #
+      - name: Hand the library and the icon to the Mac build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mz950-for-mac
+          path: |
+            Installer/staging/Disks/*.hfe
+            Icon/icon-1024.png
+            Icon/icon-128.png
+          if-no-files-found: error
+
       - name: Check the installer script
         shell: pwsh
         working-directory: Installer
@@ -194,6 +209,14 @@ jobs:
 
           Each is optional, and the installer asks whether it is for everyone or just you.
 
+          ### macOS
+
+          **Mz950-*-macOS.zip** has the VST3, an Audio Unit for Logic and GarageBand, the
+          standalone app and the sound library, for Apple Silicon and Intel, macOS 11 or
+          later. It isn't notarized by Apple, so macOS won't open it with a double-click:
+          install it with one Terminal command, as **READ ME FIRST.txt** inside explains.
+          Mz950 Studio, the disk editor, is Windows-only.
+
           ### Licence
 
           AGPLv3. The source for this build is the tag it was made from.
@@ -218,3 +241,139 @@ jobs:
               gh release create $tag @assets --title $title --notes $notes
           }
           exit $LASTEXITCODE
+
+  # =============================================================================== macOS
+  #
+  # The plugin and the standalone for the Mac, as a plain zip: VST3, an Audio Unit (Logic
+  # and GarageBand load nothing else) and the app, universal for Apple Silicon and Intel.
+  #
+  # Deliberately NOT signed with an Apple Developer ID and NOT notarized - this project
+  # does not go through Apple. Each bundle carries only the free ad-hoc signature Apple
+  # Silicon requires before it will run code at all, and READ ME FIRST.txt / install.sh
+  # take the user through the quarantine flag instead.
+  #
+  # After the Windows job, not beside it: that job writes the sound library (the C# synth)
+  # and draws the icon (a browser rasterising SVGs), neither of which runs here, and on a
+  # tag it is the one that creates the release this job then adds the zip to.
+  #
+  mac:
+    needs: build
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Take the library and the icon from the Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: Mz950-for-mac
+          path: .
+
+      - name: Cache JUCE
+        id: juce-cache
+        uses: actions/cache@v4
+        with:
+          path: JUCE
+          key: juce-mac-${{ env.JUCE_VERSION }}
+
+      - name: Fetch JUCE
+        if: steps.juce-cache.outputs.cache-hit != 'true'
+        run: git clone --depth 1 --branch "$JUCE_VERSION" https://github.com/juce-framework/JUCE.git JUCE
+
+      #
+      # Nobody working on this has a Mac, so a compile error here is read back through the
+      # API rather than from the log: the first forty "error:" lines become annotations,
+      # which the check-runs API serves without signing in.
+      #
+      - name: Configure the plugin
+        run: |
+          set -o pipefail
+          cmake -S Plugin -B Plugin/build -DJUCE_PATH="$PWD/JUCE" -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+                2>&1 | tee configure.log || {
+            grep -E "Error|error" configure.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          }
+
+      - name: Build the plugin
+        run: |
+          set -o pipefail
+          cmake --build Plugin/build --config Release --parallel 2>&1 | tee build.log || {
+            grep -E "error:|Error [0-9]" build.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          }
+
+      - name: Does the C++ still agree with the C#
+        run: ./Plugin/build/ConformanceCheck
+
+      - name: Does the disk writer round-trip the library
+        run: |
+          for disk in Installer/staging/Disks/*.hfe; do
+            printf '%-20s ' "$(basename "$disk")"
+            ./Plugin/build/DiskEditCheck "$disk" | tail -1
+          done
+
+      - name: Universal, and ad-hoc signed
+        run: |
+          art=Plugin/build/VirtualS950_artefacts/Release
+          lipo -archs "$art/VST3/Mz950.vst3/Contents/MacOS/Mz950"
+          lipo -archs "$art/AU/Mz950.component/Contents/MacOS/Mz950"
+          lipo -archs "$art/Standalone/Mz950.app/Contents/MacOS/Mz950"
+          for b in "$art/VST3/Mz950.vst3" "$art/AU/Mz950.component" "$art/Standalone/Mz950.app"; do
+            codesign --force --deep --sign - "$b"
+            codesign --verify --deep --strict "$b"
+          done
+
+      #
+      # Apple's own Audio Unit validator: the check Logic runs before it will list a plugin,
+      # so an AU that fails here would never appear there.
+      #
+      - name: Validate the Audio Unit
+        run: |
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          rm -rf ~/Library/Audio/Plug-Ins/Components/Mz950.component
+          ditto Plugin/build/VirtualS950_artefacts/Release/AU/Mz950.component \
+                ~/Library/Audio/Plug-Ins/Components/Mz950.component
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          sleep 2
+          auval -a | grep -i mz950 || true
+          auval -v aumu Ak95 Smoz
+
+      - name: Package
+        run: |
+          ver=$(sed -n 's/^project(VirtualS950 VERSION \([0-9.]*\).*/\1/p' Plugin/CMakeLists.txt)
+          name="Mz950-$ver-macOS"
+          art=Plugin/build/VirtualS950_artefacts/Release
+          out="dist/$name"
+          mkdir -p "$out/Disks" "$out/docs/img"
+
+          ditto "$art/VST3/Mz950.vst3"        "$out/Mz950.vst3"
+          ditto "$art/AU/Mz950.component"     "$out/Mz950.component"
+          ditto "$art/Standalone/Mz950.app"   "$out/Mz950.app"
+          cp Installer/staging/Disks/*.hfe    "$out/Disks/"
+          cp "Installer/mac/READ ME FIRST.txt" Installer/mac/install.sh "$out/"
+          chmod +x "$out/install.sh"
+          cp LICENSE CHANGELOG.md "$out/"
+          cp Plugin/README.md "$out/README-plugin.md"
+          cp docs/tutorial.html "$out/docs/"
+          cp docs/img/*.png "$out/docs/img/"
+
+          # ditto, not zip: bundles hold symlinks and executable bits a plain zip can lose
+          (cd dist && ditto -c -k --keepParent "$name" "$name.zip")
+          (cd dist && shasum -a 256 "$name.zip" | tee SHA256SUMS-macOS.txt)
+          ls -l dist
+
+      - name: Keep the build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mz950-macOS
+          path: |
+            dist/*.zip
+            dist/SHA256SUMS-macOS.txt
+          if-no-files-found: error
+
+      - name: Add it to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS-macOS.txt --clobber --repo "$GITHUB_REPOSITORY"

@@ -34,8 +34,18 @@ add_subdirectory("${JUCE_PATH}" JUCE)
 # elevation. Hosts differ on whether they scan it by default: in Ableton it goes in
 # Preferences - Plug-Ins - VST3 Plug-In Custom Folder, once.
 #
-set(VST3_DESTINATION "$ENV{LOCALAPPDATA}/Programs/Common/VST3"
-    CACHE PATH "Where to install the built VST3")
+# On a Mac the per-user folder is ~/Library/Audio/Plug-Ins/VST3, which every host scans; on
+# Linux it is ~/.vst3. Neither needs elevation either.
+#
+if(WIN32)
+    set(VST3_DEFAULT "$ENV{LOCALAPPDATA}/Programs/Common/VST3")
+elseif(APPLE)
+    set(VST3_DEFAULT "$ENV{HOME}/Library/Audio/Plug-Ins/VST3")
+else()
+    set(VST3_DEFAULT "$ENV{HOME}/.vst3")
+endif()
+
+set(VST3_DESTINATION "${VST3_DEFAULT}" CACHE PATH "Where to install the built VST3")
 
 #
 # The icon, which JUCE wants as PNGs rather than as the .ico Windows executables carry -
@@ -44,6 +54,22 @@ set(VST3_DESTINATION "$ENV{LOCALAPPDATA}/Programs/Common/VST3"
 # up wearing different faces.
 #
 set(ICON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../Icon")
+
+#
+# VST3 and the standalone everywhere; on a Mac an Audio Unit as well, because Logic and
+# GarageBand load nothing else. The AU's identity is the same two codes as the VST3's.
+#
+set(MZ950_FORMATS VST3 Standalone)
+if(APPLE)
+    list(APPEND MZ950_FORMATS AU)
+endif()
+
+# The icon PNGs come out of Icon\build-icon.ps1, which needs Windows. A build without them
+# - the Mac job, or a fresh clone anywhere else - goes without an icon rather than failing.
+set(MZ950_ICONS)
+if(EXISTS "${ICON_DIR}/icon-1024.png" AND EXISTS "${ICON_DIR}/icon-128.png")
+    set(MZ950_ICONS ICON_BIG "${ICON_DIR}/icon-1024.png" ICON_SMALL "${ICON_DIR}/icon-128.png")
+endif()
 
 #
 # THE NAME AND THE IDENTITY ARE TWO DIFFERENT THINGS
@@ -73,8 +99,7 @@ juce_add_plugin(VirtualS950
     # said 0.3.0, so the one version a DAW actually shows the player was the wrong one.
     VERSION                     "${PROJECT_VERSION}"
 
-    ICON_BIG                    "${ICON_DIR}/icon-1024.png"
-    ICON_SMALL                  "${ICON_DIR}/icon-128.png"
+    ${MZ950_ICONS}
 
     VST3_COPY_DIR               "${VST3_DESTINATION}"
 
@@ -90,7 +115,7 @@ juce_add_plugin(VirtualS950
 
     # Standalone as well as VST3: it opens without a DAW, which makes "is the plugin
     # broken or is the host unhappy with it" answerable in one step rather than two.
-    FORMATS                     VST3 Standalone)
+    FORMATS                     ${MZ950_FORMATS})
 
 target_sources(VirtualS950 PRIVATE
     Source/PluginProcessor.cpp
@@ -146,6 +171,20 @@ add_executable(ConformanceCheck
     Source/S950/Engine.cpp)
 
 target_include_directories(ConformanceCheck PRIVATE Source/S950 Tests)
+
+#
+# The disk writer's check, likewise JUCE-free. build.ps1 compiles it by hand on Windows; this
+# target is for everywhere else - the Mac job runs it on the sound library the Windows job
+# wrote, so a disk edited on a Mac is held to the same byte-for-byte round trip.
+#
+add_executable(DiskEditCheck
+    Tests/DiskEditCheck.cpp
+    Source/S950/Disk.cpp
+    Source/S950/Synth.cpp
+    Source/S950/SynthPatch.cpp
+    Source/S950/Hfe.cpp)
+
+target_include_directories(DiskEditCheck PRIVATE Source/S950 Tests)
 
 enable_testing()
 add_test(NAME conformance COMMAND ConformanceCheck)

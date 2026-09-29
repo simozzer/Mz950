@@ -1,0 +1,4 @@
+# Shell scripts run on macOS and Linux, where a carriage return on the #! line stops them
+# running at all ("bad interpreter"). Whatever core.autocrlf says on a Windows checkout,
+# these stay LF.
+*.sh text eol=lf

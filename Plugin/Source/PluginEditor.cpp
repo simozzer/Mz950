@@ -87,6 +87,27 @@ namespace
             const juce::File folder (path);
             if (folder.isDirectory()) return folder;
         }
+       #else
+        /*
+         * No registry, and no installer to write one: on a Mac the zip's install.sh copies
+         * the disks to a fixed place, per user first and then for the whole machine, and
+         * this looks there. Linux gets the XDG equivalent, for whoever builds it there.
+         */
+        const auto home = juce::File::getSpecialLocation (juce::File::userHomeDirectory);
+
+        const juce::File places[] =
+        {
+           #if JUCE_MAC
+            home.getChildFile ("Library/Application Support/Mz950/Disks"),
+            juce::File ("/Library/Application Support/Mz950/Disks")
+           #else
+            home.getChildFile (".local/share/Mz950/Disks"),
+            juce::File ("/usr/share/Mz950/Disks")
+           #endif
+        };
+
+        for (const auto& folder : places)
+            if (folder.isDirectory()) return folder;
        #endif
 
         return {};

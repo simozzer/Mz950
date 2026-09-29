@@ -1,0 +1,52 @@
+Mz950 for macOS
+===============
+
+An emulator that plays back Akai S900/S950 disk images: a VST3, an Audio Unit
+(for Logic and GarageBand) and a standalone app. Free and open source (AGPLv3).
+Independent - not affiliated with Akai or inMusic.
+
+Runs on Apple Silicon and Intel Macs, macOS 11 or later.
+
+
+INSTALLING - one command
+------------------------
+
+macOS will refuse to open anything in this download if you double-click it.
+That isn't a fault. Apple only lets through software whose developer has paid
+for an Apple account and sent it to Apple to be checked ("notarization"), and
+this project doesn't. So it's installed from Terminal instead:
+
+  1. Open Terminal (Applications > Utilities > Terminal).
+  2. Type  bash  and a space.
+  3. Drag install.sh from this folder into the Terminal window.
+  4. Press Return.
+
+It copies everything into place inside your own home folder, with no password
+needed, and clears the "downloaded from the internet" flag that would otherwise
+stop your DAW loading the plugin. Then rescan plug-ins in your DAW.
+
+
+INSTALLING BY HAND, if you'd rather
+-----------------------------------
+
+  Mz950.vst3        ->  ~/Library/Audio/Plug-Ins/VST3
+  Mz950.component   ->  ~/Library/Audio/Plug-Ins/Components
+  Mz950.app         ->  /Applications
+  Disks             ->  ~/Library/Application Support/Mz950/Disks
+
+then, in Terminal, for each one you copied:
+
+  xattr -dr com.apple.quarantine <the file, dragged in>
+
+
+REMOVING IT
+-----------
+
+Delete the four things above. Nothing else is installed anywhere.
+
+
+MORE
+----
+
+docs/tutorial.html is the walk-through. The source, the Windows version and
+every release: https://github.com/simozzer/Mz950
