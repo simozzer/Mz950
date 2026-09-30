@@ -6,14 +6,18 @@ Every number here came off a recording of a real S950 rather than out of a manua
 a change is a measurement it says what was measured and what it replaced. Where it is an
 assumption it says that too — those are the ones another afternoon with a recorder settles.
 
-## Unreleased
+## v0.6.1 — 2026-09-30
 
-### macOS
+A single voice per synth note, and an LFO that reaches the audio range and locks to your
+DAW's tempo. For Windows. The Mac version is in beta and not part of this release.
 
-A universal (Apple Silicon and Intel) VST3, Audio Unit and standalone, macOS 11 or later,
-shipped as a zip. It's built by CI and not notarized: `install.sh` puts everything in the
-user's own Library and clears quarantine, and READ ME FIRST.txt explains why. Mz950 Studio
-stays Windows-only.
+### macOS, in beta
+
+The Mac build isn't in this release. It's a universal (Apple Silicon and Intel) VST3,
+Audio Unit and standalone, macOS 11 or later, shipped as a zip. It's built by CI and not
+notarized: `install.sh` puts everything in the user's own Library and clears quarantine, and
+READ ME FIRST.txt explains why. It's attached to pre-releases only (`v0.6.1-beta1` onwards)
+until it has been tried on a real Mac. Mz950 Studio stays Windows-only.
 
 ### The LFO's Rate is exponential, and reaches the audio range
 

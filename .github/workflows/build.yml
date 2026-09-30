@@ -184,6 +184,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The Mac zip goes on pre-releases only for now (see the mac job), so only they
+          # say anything about it.
+          $macNotes = ''
+          if ($env:GITHUB_REF_NAME -match '-') {
+              $macNotes = @"
+          ### macOS
+
+          **Mz950-*-macOS.zip** has the VST3, an Audio Unit for Logic and GarageBand, the
+          standalone app and the sound library, for Apple Silicon and Intel, macOS 11 or
+          later. It isn't notarized by Apple, so macOS won't open it with a double-click:
+          install it with one Terminal command, as **READ ME FIRST.txt** inside explains.
+          Mz950 Studio, the disk editor, is Windows-only.
+          "@
+          }
+
           $notes = @"
           Built from ``$env:GITHUB_SHA`` by GitHub Actions.
 
@@ -209,13 +224,7 @@ jobs:
 
           Each is optional, and the installer asks whether it is for everyone or just you.
 
-          ### macOS
-
-          **Mz950-*-macOS.zip** has the VST3, an Audio Unit for Logic and GarageBand, the
-          standalone app and the sound library, for Apple Silicon and Intel, macOS 11 or
-          later. It isn't notarized by Apple, so macOS won't open it with a double-click:
-          install it with one Terminal command, as **READ ME FIRST.txt** inside explains.
-          Mz950 Studio, the disk editor, is Windows-only.
+          $macNotes
 
           ### Licence
 
@@ -380,8 +389,13 @@ jobs:
             dist/SHA256SUMS-macOS.txt
           if-no-files-found: error
 
+      #
+      # Pre-releases only (a tag with a hyphen, v0.6.1-beta2) until the Mac build has been
+      # tried on a real Mac and reported on. A full release is Windows-only until then; the
+      # zip is still built and kept as this run's artifact either way.
+      #
       - name: Add it to the release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS-macOS.txt --clobber --repo "$GITHUB_REPOSITORY"
