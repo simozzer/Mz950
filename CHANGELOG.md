@@ -34,6 +34,23 @@ Getting there took two engine changes:
 A session saved with a Rate trim will now play at a different rate, since the scale
 changed from units to octaves.
 
+### LFO tempo sync
+
+A **Sync** switch under the LFO's Shape box, on MIDI CC 115. While it's on, the Rate knob
+becomes a **division** knob, on CC 116: 4 bars, 2 bars, 1 bar, 1/2, 1/4., 1/4, 1/4T, 1/8.,
+1/8, 1/8T, 1/16., 1/16, 1/16T, 1/32 and 1/64. Bars follow the host's time signature.
+
+- **Transport playing:** the LFO's phase is set from the song position at every block, so
+  Square and S&H step exactly on the grid. S&H draws its levels from the cycle number since
+  the song's start, so the same bar gets the same steps on every pass.
+- **Transport stopped, or in the standalone:** it runs free at the tempo, 120 BPM with no
+  host.
+- **Every note rides the one LFO** while Sync is on, including keygroups that have their own
+  (desync set). That's what makes them step together.
+
+Checked at 120 BPM: 1/4 turns over twice a second and 1/8 four times. Started a quarter of
+a beat before the next beat, it turns 0.125 s in, on the beat.
+
 ## v0.6.0 — 2026-09-28
 
 Filter resonance up to self-oscillation, LFO shapes, and a Perform-tab LFO that reaches the

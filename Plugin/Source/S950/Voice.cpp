@@ -401,10 +401,13 @@ namespace s950
              * is followed rather than sampled into a few steps. Only when it is fast AND
              * moving something - at the S950's own rates this is the 32 it always was.
              */
+            // Tempo sync puts every voice on the shared LFO, which the engine locks to the grid.
+            const bool own = ownLfo && trims.lfoSync < 0.5;
+
             int block = ControlBlock;
             if (lfoCents != 0.0 || lfoFilterOctaves != 0.0)
             {
-                const double stepNow = ownLfo ? lfoStep : sharedStep;
+                const double stepNow = own ? lfoStep : sharedStep;
                 if (stepNow > 0.0)
                 {
                     const double perCycle = 2.0 * 3.14159265358979323846 / stepNow;
@@ -441,8 +444,8 @@ namespace s950
                 ++sharedCycles;
             }
 
-            const double wave  = ownLfo ? lfo::wave (shape, lfoPhase, lfoSeed, lfoCycle)
-                                        : lfo::wave (shape, sharedNow, SharedLfoSeed, sharedCycles);
+            const double wave  = own ? lfo::wave (shape, lfoPhase, lfoSeed, lfoCycle)
+                                     : lfo::wave (shape, sharedNow, SharedLfoSeed, sharedCycles);
             const double bend  = cents == 0.0 ? 1.0
                                : std::pow (2.0, cents * wave / 1200.0);
 

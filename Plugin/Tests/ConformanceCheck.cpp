@@ -670,6 +670,70 @@ namespace
             check (flips > 400, desync ? "a 300 Hz LFO is followed, not sampled"
                                        : "  and so is the shared one", flips, 400);
         }
+
+        /*
+         * Tempo sync. A square on the filter makes the note's level jump at every half cycle,
+         * so the jumps say when the LFO turned over. The keygroup keeps its own LFO (desync
+         * set) to show that sync takes it over regardless.
+         */
+        std::printf ("\n  tempo sync\n");
+
+        struct Jumps { int count; double first; };
+
+        auto synced = [&] (int division, double startPpq, bool playing, double seconds)
+        {
+            const double fs = 48000.0, bpm = 120.0;
+            s950::Engine engine (fs);
+            engine.setPatch (patch);
+            engine.trims.lfoShape.store (static_cast<float> (square));
+            engine.trims.lfoToFilter.store (99.0f);
+            engine.trims.lfoSync.store (1.0f);
+            engine.trims.lfoSyncDiv.store (static_cast<float> (division));
+
+            const int n = static_cast<int> (fs * seconds), block = 480;
+            std::vector<float> b ((size_t) n);
+            engine.noteOn (60, 100);
+
+            double ppq = startPpq;
+            for (int at = 0; at < n; at += block)
+            {
+                engine.setTransport (bpm, ppq, playing, 4.0);
+                engine.render (b.data() + at, std::min (block, n - at));
+                ppq += block / fs * bpm / 60.0;
+            }
+
+            // the level in 5 ms windows, and where it jumps by a third or more either way
+            Jumps j { 0, -1.0 };
+            double last = -1.0;
+            for (int s = 4800; s + 240 <= n; s += 240)
+            {
+                double e = 0.0;
+                for (int i = s; i < s + 240; ++i) e += b[(size_t) i] * b[(size_t) i];
+                e = std::sqrt (e / 240.0);
+                if (last > 0.0 && (e > last * 1.33 || e < last / 1.33))
+                {
+                    ++j.count;
+                    if (j.first < 0.0) j.first = s / fs;
+                }
+                last = e;
+            }
+            return j;
+        };
+
+        // 120 BPM: a quarter is 0.5 s, so 1/4 turns over twice a second and 1/8 four times -
+        // every half cycle a jump. Counted from 0.1 s to 3 s; free-running, not playing.
+        const int quarter = synced (5, 0.0, false, 3.0).count;
+        const int eighth  = synced (8, 0.0, false, 3.0).count;
+        check (quarter >= 10 && quarter <= 13, "synced to 1/4 at 120 BPM, it turns every 1/8 note", quarter, 11.6);
+        check (eighth >= 21 && eighth <= 25,   "  and at 1/8, twice as often", eighth, 23.2);
+
+        /*
+         * Locked to the grid: started at quarter note 0.75 of a playing song with 1/4 sync,
+         * the square is in its low half and must turn at quarter note 1.0 - 0.125 s in, not
+         * a whole half cycle after the note as a free LFO would.
+         */
+        const double at = synced (5, 0.75, true, 1.0).first;
+        same ("  and with the transport playing, it turns on the beat", at, 0.125, 0.012);
     }
 
     void checkFilter()

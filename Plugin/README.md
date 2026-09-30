@@ -95,6 +95,7 @@ touched. An offset keeps the shape its author gave it and moves the whole of it,
 | LFO | Shape *(Sine is the S950's)* | 113 | Sine, Saw, Square, S&H; CC in bands of 32 |
 | LFO | Rate | 76 | ±99: ×1/64 to ×256, in octaves |
 | LFO | Delay | 78 | ±99 |
+| LFO | Sync *(not on the S950)*, division | 115, 116 | off/on; 4 bars – 1/64, dotted and triplet |
 | LFO | Pitch | 77 | 0..99 |
 | LFO | Filter *(not on the S950)* | 114 | 0..99, up to ±3 octaves of cutoff |
 | Velocity | Freq, Loudness | 109, 112 | 0..99 |
@@ -130,6 +131,12 @@ Program tab.
     scream. Every notch is the same musical step, so a slow stepped LFO is easy to line up
     with a beat. The result is held to 0.02–500 Hz, and a fast LFO is followed at least
     16 times a cycle.
+- **Tempo sync**: the **Sync** switch under Shape swaps the Rate knob for a division, from
+  4 bars to 1/64 with dotted (.) and triplet (T) values. Bars follow the host's time
+  signature. With the transport playing, the LFO is locked to the song position, so Square
+  and S&H step exactly on the grid. S&H also draws the same steps at the same bar on every
+  pass. While Sync is on, every note rides that one LFO. With the transport stopped, or in
+  the standalone, it runs free at the tempo (120 BPM with no host).
   - **Delay** can go negative, to shorten or remove a programme's fade-in.
 - **Filter depth**: the LFO moves the cutoff as well, by up to three octaves either way,
   independently of Pitch. With Square or S&H, that's the classic stepped filter.

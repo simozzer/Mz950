@@ -37,6 +37,10 @@ namespace s950
         /// 0..99: how far the LFO moves the cutoff, up to lfo::FilterOctaves. Not the S950's -
         /// its LFO reaches the pitch and nothing else.
         double lfoToFilter = 0.0;
+
+        /// Tempo sync: on (>= 0.5) or off, and which lfo::Divisions entry. While on, every
+        /// voice rides the engine's shared LFO, which the engine locks to the host's grid.
+        double lfoSync = 0.0, lfoSyncDiv = 8.0;     // lfo::DefaultDivision, 1/8
     };
 
     namespace lfo
@@ -154,6 +158,44 @@ namespace s950
 
         /// How far the LFO takes the cutoff at the top of the To Filter knob, either way.
         inline constexpr double FilterOctaves = 3.0;
+
+        /*
+         * TEMPO SYNC - the divisions the LFO can lock to, one cycle each.
+         *
+         * In quarter notes, except the bar lengths, which follow the host's time signature:
+         * a bar of 6/8 is three quarters, not four. Slowest first, so the knob turns the same
+         * way the Rate knob does.
+         */
+        struct Division { const char* name; double quarters; bool bars; };
+
+        inline constexpr Division Divisions[] =
+        {
+            { "4 bars", 4.0,         true  },
+            { "2 bars", 2.0,         true  },
+            { "1 bar",  1.0,         true  },
+            { "1/2",    2.0,         false },
+            { "1/4.",   1.5,         false },
+            { "1/4",    1.0,         false },
+            { "1/4T",   2.0 / 3.0,   false },
+            { "1/8.",   0.75,        false },
+            { "1/8",    0.5,         false },
+            { "1/8T",   1.0 / 3.0,   false },
+            { "1/16.",  0.375,       false },
+            { "1/16",   0.25,        false },
+            { "1/16T",  1.0 / 6.0,   false },
+            { "1/32",   0.125,       false },
+            { "1/64",   0.0625,      false },
+        };
+
+        inline constexpr int NumDivisions  = static_cast<int> (sizeof (Divisions) / sizeof (Divisions[0]));
+        inline constexpr int DefaultDivision = 8;       // 1/8
+
+        /// One cycle of division `index`, in quarter notes, for a bar of `quartersPerBar`.
+        inline double divisionQuarters (int index, double quartersPerBar)
+        {
+            const auto& d = Divisions[index < 0 ? 0 : (index >= NumDivisions ? NumDivisions - 1 : index)];
+            return d.bars ? d.quarters * (quartersPerBar > 0.0 ? quartersPerBar : 4.0) : d.quarters;
+        }
     }
 
     /*

@@ -630,8 +630,16 @@ namespace s950
 
         // The shared LFO's speed this stretch, which the voices riding it follow sample by
         // sample - see Voice::render - so it can run as fast as their own.
-        const double sharedStep = sharedRate < 0.0 ? 0.0
-            : 2.0 * 3.14159265358979323846 * lfo::rateHz (sharedRate, now.lfoRate) / sampleRate;
+        // Synced, it runs at the tempo whether or not any keygroup rides it by itself: sync
+        // puts every voice on it.
+        const double sharedHz =
+              now.lfoSync >= 0.5 ? hostBpm / 60.0
+                                   / lfo::divisionQuarters (static_cast<int> (std::lround (now.lfoSyncDiv)),
+                                                            hostBarQuarters)
+            : sharedRate < 0.0   ? 0.0
+            :                      lfo::rateHz (sharedRate, now.lfoRate);
+
+        const double sharedStep = 2.0 * 3.14159265358979323846 * sharedHz / sampleRate;
 
         for (auto& v : voices)
             if (v.isActive())
@@ -674,6 +682,24 @@ namespace s950
         std::memset (buffer, 0, static_cast<size_t> (count) * sizeof (float));
         if (right != nullptr)
             std::memset (right, 0, static_cast<size_t> (count) * sizeof (float));
+
+        /*
+         * Tempo sync, with the transport running: put the shared LFO where the grid says it
+         * is, once a block. Its phase is the fraction of the way through the current cycle
+         * and its cycle count the whole cycles since the song's start - which is what S&H
+         * draws on, so the same bar gets the same levels every time it plays. Between here
+         * and the next block it moves at the tempo (renderSpan), so this only ever corrects
+         * rounding, and a jump in the song lands on the right step at once.
+         */
+        if (trims.lfoSync.load (std::memory_order_relaxed) >= 0.5f && hostPlaying)
+        {
+            const int div = static_cast<int> (std::lround (trims.lfoSyncDiv.load (std::memory_order_relaxed)));
+            const double cycles = hostPpq / lfo::divisionQuarters (div, hostBarQuarters);
+            const double whole  = std::floor (cycles);
+
+            sharedPhase = 2.0 * 3.14159265358979323846 * (cycles - whole);
+            sharedCycle = static_cast<unsigned> (static_cast<long long> (whole));
+        }
 
         int at = 0;
         while (at < count)

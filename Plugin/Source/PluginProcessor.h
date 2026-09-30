@@ -393,7 +393,7 @@ private:
         juce::RangedAudioParameter* control = nullptr;
     };
 
-    static constexpr int NumTrims = 18;
+    static constexpr int NumTrims = 20;
     TrimControl trimControls[NumTrims];
 
     /*

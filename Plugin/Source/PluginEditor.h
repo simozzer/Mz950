@@ -253,6 +253,19 @@ private:
     juce::Label    lfoShapeLabel;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> lfoShapeAttachment;
 
+    /*
+     * Tempo sync: a switch under the Shape box, and a division knob that takes the Rate
+     * knob's place while it is on - the two are never both meaningful, so they share a cell
+     * rather than squeezing a fifth into a full panel. showLfoSync swaps them.
+     */
+    juce::ToggleButton lfoSyncButton { "Sync" };
+    juce::Slider       lfoDivision { juce::Slider::RotaryHorizontalVerticalDrag,
+                                     juce::Slider::TextBoxBelow };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> lfoSyncAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lfoDivisionAttachment;
+
+    void showLfoSync();
+
     juce::Label  patchLabel;
     juce::Label  voicesLabel;
 

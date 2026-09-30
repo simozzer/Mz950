@@ -653,6 +653,29 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
     look::styleCaption (lfoShapeLabel);
     addAndMakeVisible (lfoShapeLabel);
 
+    // Tempo sync. Violet, an addition: the S950's LFO knows nothing of tempo.
+    lfoSyncButton.setTooltip ("Tempo sync: the LFO runs at a division of the host's tempo, set "
+                              "by the knob that replaces Rate. With the transport playing it "
+                              "is locked to the grid, so Square and S&H step on the beat and S&H "
+                              "draws the same steps at the same bar every time. Every note rides "
+                              "the one LFO while it is on. Stopped, or in the standalone, it runs "
+                              "at the tempo (120 with no host). MIDI CC 115.");
+    look::accent (lfoSyncButton, look::extra);
+    lfoSyncButton.onClick = [this] { showLfoSync(); };
+    addAndMakeVisible (lfoSyncButton);
+    lfoSyncAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
+        processor.parameters, "lfoSync", lfoSyncButton);
+
+    lfoDivision.setTooltip ("The LFO's cycle while synced, from four bars to a sixty-fourth: "
+                            ". is dotted, T is a triplet. Bars follow the host's time signature. "
+                            "MIDI CC 116.");
+    lfoDivision.setTitle ("LFO sync division");
+    lfoDivision.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 46, 14);
+    look::accent (lfoDivision, look::extra);
+    addChildComponent (lfoDivision);
+    lfoDivisionAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+        processor.parameters, "lfoSyncDiv", lfoDivision);
+
     // Glide. Not a machine feature, and its panel's note is where that gets said once.
     const juce::String glideTip =
         "Portamento: each note slides in from the last note played in the same keygroup. "
@@ -986,7 +1009,7 @@ std::vector<juce::Component*> VirtualS950Editor::performParts()
         &voiceCount, &voiceCountLabel,
         &wideButton, &offsetButton, &wideDetune, &wideDetuneLabel,
         &wideSpread, &wideSpreadLabel,
-        &lfoShape, &lfoShapeLabel };
+        &lfoShape, &lfoShapeLabel, &lfoSyncButton };
 
     for (auto& k : knobs)
     {
@@ -1007,8 +1030,27 @@ void VirtualS950Editor::showTab (int tab)
     programPage.setVisible (tab == 0);
     synthPage.setVisible (tab == 2);
 
+    showLfoSync();      // the Rate knob or the division knob, whichever sync says
+
     if (tab == 0)
         programPage.refresh();
+}
+
+/*
+ * The Rate knob, or the sync division knob in its place. Also called from the timer, since
+ * automation or CC 115 can switch sync with nobody touching the button.
+ */
+void VirtualS950Editor::showLfoSync()
+{
+    const auto* sync = processor.parameters.getRawParameterValue ("lfoSync");
+    const bool  on   = sync != nullptr && sync->load() >= 0.5f;
+    const bool  here = processor.editorTab == 1;
+
+    for (auto& k : knobs)
+        if (juce::String (k.id) == "lfoRate")
+            k.slider->setVisible (here && ! on);
+
+    lfoDivision.setVisible (here && on);
 }
 
 void VirtualS950Editor::refreshPrograms()
@@ -1043,6 +1085,8 @@ void VirtualS950Editor::timerCallback()
      * the processor bumps, catches all three without any of them having to know this
      * window exists.
      */
+    showLfoSync();      // sync may have been switched by automation or CC 115
+
     const int generation = processor.getDiskGeneration();
 
     if (generation != seenGeneration)
@@ -1277,13 +1321,24 @@ void VirtualS950Editor::resized()
         auto area = lfoPanel.content();
         auto cell = area.removeFromLeft (80);
         lfoShapeLabel.setBounds (cell.removeFromBottom (13));
-        lfoShape.setBounds (cell.withSizeKeepingCentre (76, 24));
+
+        // the Shape box and the Sync switch under it, centred in what is left
+        auto stack = cell.withSizeKeepingCentre (76, 24 + 6 + 22);
+        lfoShape.setBounds (stack.removeFromTop (24));
+        stack.removeFromTop (6);
+        lfoSyncButton.setBounds (stack);
 
         const auto cells = cellsAcross (area, 4);
         int i = 0;
         for (auto& k : knobs)
             if (juce::String (k.group) == "LFO")
+            {
                 placeKnob (cells[(size_t) i++], *k.slider, *k.label);
+
+                // the division knob sits exactly where Rate does, and shows in its place
+                if (juce::String (k.id) == "lfoRate")
+                    lfoDivision.setBounds (k.slider->getBounds());
+            }
     }
     placeGroup (velocityPanel, "VELOCITY");
 

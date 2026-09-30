@@ -213,6 +213,23 @@ VirtualS950Processor::describeParameters()
     addRange ("lfoToFilter", "LFO Filter Depth", 0.0f, 99.0f);
 
     /*
+     * Tempo sync. While on, the LFO runs at a division of the host's tempo instead of at
+     * Rate, and with the transport playing it is locked to the grid - see Engine::render.
+     * Off by default, like every addition here.
+     */
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { "lfoSync", 1 }, "LFO Sync", false));
+
+    {
+        juce::StringArray names;
+        for (const auto& d : s950::lfo::Divisions) names.add (d.name);
+
+        layout.add (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { "lfoSyncDiv", 1 }, "LFO Sync Division",
+            names, s950::lfo::DefaultDivision));
+    }
+
+    /*
      * The LFO's shape - sine being the S950's, and the default; the other three are
      * additions. Absolute, not an offset: there is nothing on the disk to offset it from.
      * Its raw value is the choice's index, which is what the engine's trims carry.
@@ -447,6 +464,11 @@ VirtualS950Processor::VirtualS950Processor()
 
     // 114, undefined, for how far the LFO moves the filter.
     trimControls[17] = { 114, "lfoToFilter", &AT::lfoToFilter };
+
+    // 115 switches tempo sync (64 and up is on) and 116 picks the division, fifteen bands
+    // slowest first - both undefined in General MIDI.
+    trimControls[18] = { 115, "lfoSync",    &AT::lfoSync    };
+    trimControls[19] = { 116, "lfoSyncDiv", &AT::lfoSyncDiv };
 
     for (auto& t : trimControls)
     {
@@ -788,6 +810,26 @@ void VirtualS950Processor::processBlock (juce::AudioBuffer<float>& buffer,
      */
     if (mono.getNumSamples() < count || mono.getNumChannels() < 2)
         mono.setSize (2, count, false, true, true);     // only if a host broke its promise
+
+    /*
+     * The host's tempo and position, for the LFO's tempo sync. A host with no play head -
+     * the standalone - leaves the engine at 120 and running free, which is also what a
+     * stopped transport does.
+     */
+    if (auto* head = getPlayHead())
+    {
+        if (const auto pos = head->getPosition())
+        {
+            const auto ppq = pos->getPpqPosition();
+            const auto sig = pos->getTimeSignature();
+
+            engine->setTransport (pos->getBpm().orFallback (120.0),
+                                  ppq.orFallback (0.0),
+                                  pos->getIsPlaying() && ppq.hasValue(),
+                                  sig.hasValue() && sig->denominator > 0
+                                      ? sig->numerator * 4.0 / sig->denominator : 4.0);
+        }
+    }
 
     float* leftScratch  = mono.getWritePointer (0);
     float* rightScratch = mono.getWritePointer (1);

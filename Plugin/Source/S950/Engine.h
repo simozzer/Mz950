@@ -53,6 +53,7 @@ namespace s950
             std::atomic<float> velToFilter { 0.0f }, velToLoudness { 0.0f };
             std::atomic<float> resonance { 0.0f };
             std::atomic<float> lfoShape { 0.0f }, lfoToFilter { 0.0f };
+            std::atomic<float> lfoSync { 0.0f }, lfoSyncDiv { 8.0f };
 
             /// One reading of the lot, for a stretch of audio to be rendered against.
             Trims read() const
@@ -76,6 +77,8 @@ namespace s950
                 t.resonance     = resonance.load (std::memory_order_relaxed);
                 t.lfoShape      = lfoShape.load (std::memory_order_relaxed);
                 t.lfoToFilter   = lfoToFilter.load (std::memory_order_relaxed);
+                t.lfoSync       = lfoSync.load (std::memory_order_relaxed);
+                t.lfoSyncDiv    = lfoSyncDiv.load (std::memory_order_relaxed);
                 return t;
             }
         };
@@ -239,6 +242,23 @@ namespace s950
          */
         void render (float* left, float* right, int count);
 
+        /*
+         * Where the host's transport is, for tempo sync. Audio thread, before render().
+         *
+         * `ppq` is the position at the start of the next block in quarter notes, and is only
+         * read while `playing` - then the shared LFO is locked to it, so a synced S&H steps
+         * on the grid and draws the same levels at the same bar every pass. Stopped, or with
+         * no host at all (the standalone), the LFO runs free at the tempo. With no call at
+         * all it runs at 120.
+         */
+        void setTransport (double bpm, double ppq, bool playing, double quartersPerBar)
+        {
+            hostBpm        = bpm > 0.0 ? bpm : 120.0;
+            hostPpq        = ppq;
+            hostPlaying    = playing;
+            hostBarQuarters = quartersPerBar > 0.0 ? quartersPerBar : 4.0;
+        }
+
         // ------------------------------------------------------------ for the caller
 
         int getActiveVoices() const;
@@ -344,6 +364,10 @@ namespace s950
         long long sequence = 0;
         double    sharedPhase = 0.0;
         double    sharedRate  = -1.0;   // the shared LFO's rate on the panel's 0..99, or -1 for none
+
+        // the host's transport, for tempo sync - see setTransport. Audio thread only.
+        double    hostBpm = 120.0, hostPpq = 0.0, hostBarQuarters = 4.0;
+        bool      hostPlaying = false;
         unsigned  sharedCycle = 0;
         int       wheel = 0;
         int       pressure = 0;          // channel aftertouch, at rest at nothing
