@@ -93,7 +93,8 @@ touched. An offset keeps the shape its author gave it and moves the whole of it,
 | VCA envelope | Attack, Decay, Sustain, Release | 73, 75, 79, 72 | ±99 |
 | VCF envelope | Attack, Decay, Sustain, Release | 102, 103, 104, 105 | ±99 |
 | LFO | Shape *(Sine is the S950's)* | 113 | Sine, Saw, Square, S&H; CC in bands of 32 |
-| LFO | Rate, Delay | 76, 78 | ±99 |
+| LFO | Rate | 76 | ±99: ×1/64 to ×256, in octaves |
+| LFO | Delay | 78 | ±99 |
 | LFO | Pitch | 77 | 0..99 |
 | LFO | Filter *(not on the S950)* | 114 | 0..99, up to ±3 octaves of cutoff |
 | Velocity | Freq, Loudness | 109, 112 | 0..99 |
@@ -123,7 +124,12 @@ Program tab.
 - **A longer reach:**
   - **Pitch** depth follows the machine's 1.5 cents a step to +50, then grows to a whole
     octave at +99.
-  - **Rate** goes below the machine's slowest (1.8 Hz), down to 0.1 Hz.
+  - **Rate** works in octaves from the programme's own rate: down six (×1/64, a cycle of
+    over half a minute from the machine's slowest) or up eight (×256), into the audio
+    range. There, Square or S&H on Pitch or Filter turns from a wobble into a buzz and a
+    scream. Every notch is the same musical step, so a slow stepped LFO is easy to line up
+    with a beat. The result is held to 0.02–500 Hz, and a fast LFO is followed at least
+    16 times a cycle.
   - **Delay** can go negative, to shorten or remove a programme's fade-in.
 - **Filter depth**: the LFO moves the cutoff as well, by up to three octaves either way,
   independently of Pitch. With Square or S&H, that's the classic stepped filter.

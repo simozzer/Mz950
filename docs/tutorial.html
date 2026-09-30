@@ -453,7 +453,8 @@ numbers are in each panel's corner:</p>
       <td>CC 73, 75, 79, 72 · ±99</td></tr>
   <tr><th>VCF envelope</th><td>Attack, Decay, Sustain, Release</td>
       <td>CC 102, 103, 104, 105 · ±99</td></tr>
-  <tr><th>LFO</th><td>Rate, Delay</td><td>CC 76, 78 · ±99</td></tr>
+  <tr><th>LFO</th><td>Rate</td><td>CC 76 · ×1/64 to ×256</td></tr>
+  <tr><th>LFO</th><td>Delay</td><td>CC 78 · ±99</td></tr>
   <tr><th>LFO</th><td>Pitch</td><td>CC 77 · 0–99</td></tr>
   <tr><th>Velocity</th><td>Freq, Loudness</td><td>CC 109, 112 · 0–99</td></tr>
 </table>
@@ -469,7 +470,10 @@ past it</strong>:</p>
 <ul>
   <li><strong>Pitch</strong> keeps the machine's 1.5 cents a step up to +50, then grows to a
       whole octave at +99.</li>
-  <li><strong>Rate</strong> slows below the machine's 1.8&nbsp;Hz, down to 0.1&nbsp;Hz.</li>
+  <li><strong>Rate</strong> works in octaves from the programme's own rate, so every notch is
+      the same musical step. It goes down six octaves, to a cycle of over half a minute,
+      and up eight, into the audio range, where Square or S&amp;H on Pitch or Filter buzzes
+      and screams.</li>
   <li><strong>Delay</strong> can go negative, which shortens a programme's slow fade-in, or
       removes it at −99, so short notes get the vibrato too.</li>
 </ul>

@@ -87,18 +87,37 @@ namespace s950
          * would. Only past the machine's end does the Perform tab carry on.
          */
 
+        /// How far the Rate trim reaches, in octaves either way from the programme's own rate,
+        /// and the limits the result is held to.
+        inline constexpr double RateOctavesDown = 6.0;
+        inline constexpr double RateOctavesUp   = 8.0;
+        inline constexpr double RateMinHz       = 0.02;
+        inline constexpr double RateMaxHz       = 500.0;
+
         /*
-         * Rate in hertz, for the programme's 0..99 plus the trim.
+         * Rate in hertz, from the keygroup's 0..99 and the Perform trim's -99..+99.
          *
-         * 0..99 is measured: 1.785 Hz and 0.089 Hz a unit, up to 10.6. Below zero is not the
-         * S950's - its slowest is 1.785 Hz - and runs down exponentially to 0.1 Hz at -99, a
-         * ten-second sweep, which is where a slow filter sweep or a lazy S&H wants to be.
+         * The keygroup's value is the machine's, measured: 1.785 Hz and 0.089 Hz a unit, up
+         * to 10.6. The trim is not an addition to it but a multiplier - OCTAVES, evenly
+         * spread across the knob - so every notch moves the rate by the same musical amount
+         * wherever it is. That is what makes a slow rate easy to set where a linear knob
+         * crowds it into the first few degrees, and a doubling or a halving is a fixed turn
+         * when a stepped LFO wants lining up with a beat.
+         *
+         * Down six octaves at -99: from the S950's slowest, 1.8 Hz, to a 36-second cycle.
+         * Up eight at +99, into the audio range, where a square or S&H on pitch or filter
+         * turns from a wobble into a buzz and then a scream. Held to 0.02 Hz..500 Hz. At a
+         * trim of 0 this is the S950's rate exactly.
          */
-        inline double rateHz (double units)
+        inline double rateHz (double diskUnits, double trimUnits)
         {
-            const double u = cal::clamp (units, -99.0, 99.0);
-            return u >= 0.0 ? cal::LfoRateHzAtZero + u * cal::LfoRateHzPerUnit
-                            : cal::LfoRateHzAtZero * std::pow (0.1 / cal::LfoRateHzAtZero, -u / 99.0);
+            const double base = cal::LfoRateHzAtZero
+                              + cal::clamp (diskUnits, 0.0, 99.0) * cal::LfoRateHzPerUnit;
+            const double t    = cal::clamp (trimUnits, -99.0, 99.0);
+            if (t == 0.0) return base;
+
+            const double octaves = t / 99.0 * (t > 0.0 ? RateOctavesUp : RateOctavesDown);
+            return cal::clamp (base * std::pow (2.0, octaves), RateMinHz, RateMaxHz);
         }
 
         /*
@@ -294,9 +313,10 @@ namespace s950
          * it set they ran at rates 3.5% apart and drifted a whole turn in the same six.
          */
         /// Mono, as it always was: full gain into one buffer.
-        void render (float* buffer, int count, double sharedPhase, unsigned sharedCycle = 0)
+        void render (float* buffer, int count, double sharedPhase, unsigned sharedCycle = 0,
+                     double sharedStep = 0.0)
         {
-            render (buffer, nullptr, count, sharedPhase, sharedCycle);
+            render (buffer, nullptr, count, sharedPhase, sharedCycle, sharedStep);
         }
 
         /*
@@ -306,8 +326,14 @@ namespace s950
          * gains are ignored and the sample goes into `left` at full level. Only a caller with
          * two channels pays for the second write.
          */
+        /*
+         * `sharedStep` is how far the shared LFO moves a sample, so a voice riding it can
+         * follow it through the stretch rather than holding the phase it started at - which,
+         * once the Rate trim reaches the audio range, is the difference between a buzz and
+         * one fixed value for a whole host buffer.
+         */
         void render (float* left, float* right, int count, double sharedPhase,
-                     unsigned sharedCycle = 0);
+                     unsigned sharedCycle = 0, double sharedStep = 0.0);
 
         /// The seed S&H draws from on the shared LFO, the same for every voice.
         static constexpr unsigned SharedLfoSeed = 0x5EEDu;

@@ -563,12 +563,13 @@ namespace
          */
         std::printf ("\n  the Perform tab's LFO range\n");
 
-        same ("rate at 0 is the S950's slowest",     rateHz (0.0), s950::cal::LfoRateHzAtZero);
-        same ("rate at 99 is the S950's fastest",    rateHz (99.0),
+        same ("rate at 0 is the S950's slowest",     rateHz (0.0, 0.0), s950::cal::LfoRateHzAtZero);
+        same ("rate at 99 is the S950's fastest",    rateHz (99.0, 0.0),
               s950::cal::LfoRateHzAtZero + 99.0 * s950::cal::LfoRateHzPerUnit);
-        same ("  and below zero it slows to 0.1 Hz", rateHz (-99.0), 0.1, 1e-9);
-        check (rateHz (-30.0) < rateHz (0.0) && rateHz (-60.0) < rateHz (-30.0),
-               "  steadily", rateHz (-30.0), rateHz (-60.0));
+        same ("  the trim is octaves: -99 is six down", rateHz (40.0, -99.0), rateHz (40.0, 0.0) / 64.0, 1e-9);
+        same ("  and +99 eight up",                  rateHz (0.0, 99.0), s950::cal::LfoRateHzAtZero * 256.0, 1e-9);
+        same ("  evenly: half way up is four",       rateHz (0.0, 49.5), s950::cal::LfoRateHzAtZero * 16.0, 1e-9);
+        same ("  held to 500 Hz at the top",         rateHz (99.0, 99.0), RateMaxHz);
 
         same ("depth on the disk is the S950's",     pitchCents (40.0, 0.0), 40.0 * s950::cal::LfoDepthCentsPerUnit);
         same ("  and the trim to +50 adds the same", pitchCents (20.0, 30.0), 50.0 * s950::cal::LfoDepthCentsPerUnit);
@@ -628,6 +629,47 @@ namespace
         const auto flat = render (0.0), moving = render (99.0);
         check (swing (flat) < 1.05, "To Filter at zero leaves the filter still", swing (flat), 1.05);
         check (swing (moving) > 1.5, "  and turned up, the LFO swings the cutoff", swing (moving), 1.5);
+
+        /*
+         * Audio rate, on both kinds of LFO. A 300 Hz square on the pitch, with the note held
+         * still otherwise: the output must hop between two pitches three hundred times a
+         * second. Measured by the sign of the frame-to-frame playback-rate change - taken
+         * from how fast the saw's ramp climbs - flipping at least 400 times in half a second.
+         * Held to one value per control block, or per host buffer for the shared LFO as it
+         * used to be, it flips a few dozen times at most.
+         */
+        for (bool desync : { true, false })
+        {
+            auto fast = std::make_shared<s950::Patch> (*patch);
+            fast->keygroups[0].zoneFilter = 99;
+            fast->keygroups[0].lfoDesync  = desync;
+
+            s950::Engine engine (48000.0);
+            engine.setPatch (fast);
+            engine.trims.lfoShape.store (static_cast<float> (square));
+            engine.trims.lfoDepth.store (99.0f);
+            // 300 Hz from the programme's 60 (7.1 Hz): 5.4 octaves up, of eight at +99
+            engine.trims.lfoRate.store (static_cast<float> (99.0 * std::log2 (300.0 / rateHz (60.0, 0.0)) / 8.0));
+
+            std::vector<float> b (24000);
+            engine.noteOn (60, 100);
+            for (int at = 0; at < 24000; at += 512)
+                engine.render (b.data() + at, std::min (512, 24000 - at));
+
+            // the saw's slope: its step size, sample to sample, rises and falls with the pitch
+            int flips = 0; double lastSlope = 0.0, lastTrend = 0.0;
+            for (size_t i = 2400; i + 1 < b.size(); ++i)
+            {
+                const double slope = b[i + 1] - b[i];
+                if (slope < 0.0 || std::fabs (slope) > 0.2) continue;       // the saw's reset
+                const double trend = slope - lastSlope;
+                if (lastSlope != 0.0 && std::fabs (trend) > 1e-4 && trend * lastTrend < 0.0) ++flips;
+                if (std::fabs (trend) > 1e-4) lastTrend = trend;
+                lastSlope = slope;
+            }
+            check (flips > 400, desync ? "a 300 Hz LFO is followed, not sampled"
+                                       : "  and so is the shared one", flips, 400);
+        }
     }
 
     void checkFilter()
@@ -1370,7 +1412,7 @@ namespace
          */
         const std::vector<float> stillEarly (still.begin(), still.begin() + 2400);
         const auto slowEarly = render ( 0.0, 50.0, 0.0, 2400);   // depth on the S950's own scale
-        const auto fastEarly = render (99.0, 50.0, 0.0, 2400);
+        const auto fastEarly = render (30.0, 50.0, 0.0, 2400);   // ~9.5 Hz: fast, not audio rate
 
         check (apart (fastEarly, stillEarly) > apart (slowEarly, stillEarly) * 1.5,
                "a rate trim makes it wobble sooner",
@@ -1400,9 +1442,9 @@ namespace
                 return buffer;
             };
 
-            check (apart (early (99.0), stillEarly) > apart (early (0.0), stillEarly) * 1.5,
+            check (apart (early (30.0), stillEarly) > apart (early (0.0), stillEarly) * 1.5,
                    "  and on a keygroup riding the shared LFO",
-                   apart (early (99.0), stillEarly), apart (early (0.0), stillEarly) * 1.5);
+                   apart (early (30.0), stillEarly), apart (early (0.0), stillEarly) * 1.5);
         }
 
         /*
@@ -1410,7 +1452,7 @@ namespace
          * climbs for seven and a half seconds, so the start of the note is barely bent at all
          * where the same note without it is bent hard.
          */
-        const auto faded = render (99.0, 50.0, 99.0, 2400);
+        const auto faded = render (30.0, 50.0, 99.0, 2400);
         check (apart (faded, stillEarly) < apart (fastEarly, stillEarly) * 0.5,
                "a delay trim holds the wobble off the start",
                apart (faded, stillEarly), apart (fastEarly, stillEarly) * 0.5);

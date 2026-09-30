@@ -584,8 +584,9 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
 
         // What each LFO knob does past the S950's own range, said where the hand is.
         const juce::String lfoNote =
-              id == "lfoRate"  ? " Both ways: below the machine's slowest (1.8 Hz) it carries on"
-                                 " down to 0.1 Hz, a ten-second sweep."
+              id == "lfoRate"  ? " In octaves, so every notch is the same musical step: down six"
+                                 " (x1/64, a half-minute sweep) or up eight (x256), into the audio"
+                                 " range, where Square or S&H buzzes and screams. 0.02-500 Hz."
             : id == "lfoDepth" ? " Adds only. The S950's scale to +50 (76 cents); past that it"
                                  " grows to a whole octave at +99, which is not the machine's."
             : id == "lfoDelay" ? " Both ways: below zero it shortens the programme's fade-in,"

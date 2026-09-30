@@ -628,21 +628,23 @@ namespace s950
         const double cents  = wideCents.load (std::memory_order_relaxed);
         const double spread = wideSpread.load (std::memory_order_relaxed);
 
+        // The shared LFO's speed this stretch, which the voices riding it follow sample by
+        // sample - see Voice::render - so it can run as fast as their own.
+        const double sharedStep = sharedRate < 0.0 ? 0.0
+            : 2.0 * 3.14159265358979323846 * lfo::rateHz (sharedRate, now.lfoRate) / sampleRate;
+
         for (auto& v : voices)
             if (v.isActive())
             {
                 v.setTrims (now);
                 v.setBend (bendNow);
                 v.setWide (cents, spread);
-                v.render (left, right, count, sharedPhase, sharedCycle);
+                v.render (left, right, count, sharedPhase, sharedCycle, sharedStep);
             }
 
         // The shared LFO moves with the audio, so it advances per stretch rather than
         // once per block - otherwise splitting a block would change how it sounds. The
         // whole cycles are counted too: they are what S&H draws a new level on.
-        const double sharedStep = sharedRate < 0.0 ? 0.0
-            : 2.0 * 3.14159265358979323846 * lfo::rateHz (sharedRate + now.lfoRate) / sampleRate;
-
         sharedPhase += sharedStep * count;
         while (sharedPhase > 2.0 * 3.14159265358979323846)
         {

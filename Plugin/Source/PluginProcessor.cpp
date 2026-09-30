@@ -182,7 +182,26 @@ VirtualS950Processor::describeParameters()
      * The parameter IDs stay, so a session saved with these at 0..99 plays as it did - bar
      * a depth past +50, which is now deeper, as it was meant to be.
      */
-    addTrim  ("lfoRate",  "LFO Rate",  99.0f);
+    /*
+     * Rate reads as what it does - a multiplier on the programme's own rate, "x0.25" to
+     * "x4.00" - because the trim is octaves, not units: see lfo::rateHz. "+40" said nothing
+     * about how much faster.
+     */
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "lfoRate", 1 },
+        "LFO Rate",
+        juce::NormalisableRange<float> (-99.0f, 99.0f, 0.0f),
+        0.0f,
+        juce::AudioParameterFloatAttributes().withStringFromValueFunction (
+            [] (float v, int)
+            {
+                const double octaves = v / 99.0 * (v > 0.0f ? s950::lfo::RateOctavesUp
+                                                            : s950::lfo::RateOctavesDown);
+                const double times = std::pow (2.0, octaves);
+                return juce::String (juce::CharPointer_UTF8 ("\xc3\x97"))
+                       + (times >= 10.0 ? juce::String (juce::roundToInt (times))
+                                        : juce::String (times, 2));
+            })));
     addRange ("lfoDepth", "LFO Pitch Depth", 0.0f, 99.0f);     // named for what it moves; the ID stays
     addTrim  ("lfoDelay", "LFO Delay", 99.0f);
 

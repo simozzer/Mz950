@@ -6,6 +6,34 @@ Every number here came off a recording of a real S950 rather than out of a manua
 a change is a measurement it says what was measured and what it replaced. Where it is an
 assumption it says that too — those are the ones another afternoon with a recorder settles.
 
+## Unreleased
+
+### macOS
+
+A universal (Apple Silicon and Intel) VST3, Audio Unit and standalone, macOS 11 or later,
+shipped as a zip. It's built by CI and not notarized: `install.sh` puts everything in the
+user's own Library and clears quarantine, and READ ME FIRST.txt explains why. Mz950 Studio
+stays Windows-only.
+
+### The LFO's Rate is exponential, and reaches the audio range
+
+Rate now works in **octaves** from the programme's own rate: -99 is six octaves down
+(×1/64) and +99 eight up (×256), held to 0.02–500 Hz. Every notch is the same musical step,
+so a slow rate is as easy to set as a fast one, and a stepped LFO is easy to line up with a
+beat. At the top, Square or S&H on Pitch or Filter turns into a buzz and then a scream. The
+knob reads as a multiplier, ×0.25 to ×4.00 and beyond.
+
+Getting there took two engine changes:
+- **The control block shortens for a fast LFO.** It gives at least 16 updates a cycle, down
+  to 4 samples, so the LFO is followed rather than sampled into a few steps. It only
+  shortens when the LFO is fast and moving something. Eight voices at 500 Hz on pitch and
+  filter measured 1.4% of one core, against 0.65% as the S950.
+- **The shared LFO is followed through each host buffer.** Before, it held one value per
+  buffer. The engine still matches the C# reference.
+
+A session saved with a Rate trim will now play at a different rate, since the scale
+changed from units to octaves.
+
 ## v0.6.0 — 2026-09-28
 
 Filter resonance up to self-oscillation, LFO shapes, and a Perform-tab LFO that reaches the

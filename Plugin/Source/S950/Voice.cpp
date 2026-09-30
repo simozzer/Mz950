@@ -269,7 +269,7 @@ namespace s950
         // them - see the lfo namespace in Voice.h.
         lfoCents    = lfo::pitchCents (kg->lfoDepth, trims.lfoDepth) + wheelCents;
         lfoStep     = 2.0 * 3.14159265358979323846
-                      * lfo::rateHz (kg->lfoRate + trims.lfoRate) / sampleRate;
+                      * lfo::rateHz (kg->lfoRate, trims.lfoRate) / sampleRate;
         fadeSeconds = lfo::fadeSeconds (kg->lfoDelay + trims.lfoDelay);
 
         lfoFilterOctaves = cal::clamp (trims.lfoToFilter, 0.0, 99.0) / 99.0 * lfo::FilterOctaves;
@@ -374,7 +374,7 @@ namespace s950
     }
 
     void Voice::render (float* left, float* right, int count, double sharedPhase,
-                        unsigned sharedCycle)
+                        unsigned sharedCycle, double sharedStep)
     {
         if (stage == Stage::idle)
             return;
@@ -395,7 +395,24 @@ namespace s950
         int done = 0;
         while (done < count && stage != Stage::idle)
         {
-            const int n = std::min (ControlBlock, count - done);
+            /*
+             * The control block, shortened for a fast LFO: sixteen updates a cycle at least,
+             * down to four samples, so an LFO the Rate trim has pushed into the audio range
+             * is followed rather than sampled into a few steps. Only when it is fast AND
+             * moving something - at the S950's own rates this is the 32 it always was.
+             */
+            int block = ControlBlock;
+            if (lfoCents != 0.0 || lfoFilterOctaves != 0.0)
+            {
+                const double stepNow = ownLfo ? lfoStep : sharedStep;
+                if (stepNow > 0.0)
+                {
+                    const double perCycle = 2.0 * 3.14159265358979323846 / stepNow;
+                    block = std::max (4, std::min (ControlBlock, static_cast<int> (perCycle / 16.0)));
+                }
+            }
+
+            const int n = std::min (block, count - done);
 
             // A note-off waiting out its latency lets go at the block where the wait ends:
             // within one control block, 0.7 ms at 48 kHz, of when the machine would.
@@ -415,8 +432,17 @@ namespace s950
                               ? (fadeT >= fadeSeconds ? 1.0 : fadeT / fadeSeconds) : 1.0;
             const double cents = lfoCents * fade;
             const int    shape = static_cast<int> (std::lround (trims.lfoShape));
+            // The shared LFO where it has got to by this block, not where the stretch began.
+            double   sharedNow    = sharedPhase + sharedStep * done;
+            unsigned sharedCycles = sharedCycle;
+            while (sharedNow >= 2.0 * 3.14159265358979323846)
+            {
+                sharedNow -= 2.0 * 3.14159265358979323846;
+                ++sharedCycles;
+            }
+
             const double wave  = ownLfo ? lfo::wave (shape, lfoPhase, lfoSeed, lfoCycle)
-                                        : lfo::wave (shape, sharedPhase, SharedLfoSeed, sharedCycle);
+                                        : lfo::wave (shape, sharedNow, SharedLfoSeed, sharedCycles);
             const double bend  = cents == 0.0 ? 1.0
                                : std::pow (2.0, cents * wave / 1200.0);
 
