@@ -68,8 +68,9 @@ SynthPage::SynthPage (VirtualS950Processor& p) : processor (p)
     status.setJustificationType (juce::Justification::centredRight);
     addAndMakeVisible (status);
 
-    hint.setText ("Each oscillator is drawn as a looped sample and becomes a keygroup; the drums are "
-                  "one-shots. Envelopes, filter and LFO live on the Program tab and survive a re-render.",
+    hint.setText ("The oscillators are mixed into one looped sample - one keygroup, one voice a note; "
+                  "the drums are one-shots. Envelopes, filter and LFO live on the Program tab and "
+                  "survive a re-render.",
                   juce::dontSendNotification);
     hint.setFont (look::font (11.0f));
     hint.setColour (juce::Label::textColourId, look::dim);
@@ -89,9 +90,9 @@ SynthPage::SynthPage (VirtualS950Processor& p) : processor (p)
         o.kind.onChange = [this] { relabel(); push(); };
         addAndMakeVisible (o.kind);
 
-        knob (o.level,  o.levelL,  "Level",  0, 99, 99,  "How loud this layer is, as the zone's loudness trim.");
+        knob (o.level,  o.levelL,  "Level",  0, 99, 99,  "How loud this oscillator is in the mix.");
         knob (o.octave, o.octaveL, "Octave", -2, 2, 0,   "Transpose, in octaves.", signedText);
-        knob (o.fine,   o.fineL,   "Fine",   -50, 50, 0, "Detune, in cents. Two layers a few cents apart is the classic wide sound.",
+        knob (o.fine,   o.fineL,   "Fine",   -50, 50, 0, "Detune, in cents. Two oscillators a few cents apart is the classic wide sound - the beating is drawn into the loop.",
               [] (double v) { return signedText (v) + " ct"; });
         knob (o.phase,  o.phaseL,  "Phase",  0, 99, 0,   "Where in its cycle the wave starts. Layers that start apart do not stack "
                                                           "into one spike at the attack.");

@@ -20,8 +20,11 @@
  */
 
 #include "Disk.h"
+#include "Engine.h"
+#include "Synth.h"
 #include "SynthPatch.h"
 
+#include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <set>
@@ -512,49 +515,92 @@ int main (int argc, char** argv)
         for (const auto& e : d.getEntries()) { if (e.type == 'P') ++programCount; if (e.type == 'S') ++samples; }
 
         ++checks; if (programCount != 1)   fail ("synth", "one programme", programCount, 1);
-        ++checks; if (samples != 2 + 8)    fail ("synth", "two waves and eight drums", samples, 10);
+        ++checks; if (samples != 1 + 8)    fail ("synth", "one mixed wave and eight drums", samples, 9);
 
         const Disk::Entry* prog = d.find ("FAT SAW", 'P');
         ++checks;
         if (prog == nullptr) { fail ("synth", "the programme is named for the recipe", 0, 1); return 1; }
 
         const auto groups = d.keygroups (*prog);
-        ++checks; if (groups.size() != 10) { fail ("synth", "a keygroup per layer", (int) groups.size(), 10); return 1; }
+        ++checks; if (groups.size() != 9) { fail ("synth", "one oscillator keygroup and the drums", (int) groups.size(), 9); return 1; }
 
-        // the oscillators: whole synth range, tuned, not constant pitch
-        ++checks; if (groups[0].zone1.name != "OSC1" || groups[1].zone1.name != "OSC2") fail ("synth", "OSC1 and OSC2 first", 0, 1);
-        ++checks; if (groups[0].lowKey != Recipe::SynthLowKeyWithDrums || groups[0].highKey != 127) fail ("synth", "OSC1 spans the synth range", groups[0].lowKey, Recipe::SynthLowKeyWithDrums);
-        ++checks; if (groups[0].constantPitch() || groups[0].oneShot()) fail ("synth", "an oscillator tracks the key", 1, 0);
+        // the oscillators, mixed: one keygroup over the whole synth range, played as drawn
+        ++checks; if (groups[0].zone1.name != MixSampleName) fail ("synth", "the mix comes first", 0, 1);
+        ++checks; if (groups[0].lowKey != Recipe::SynthLowKeyWithDrums || groups[0].highKey != 127) fail ("synth", "the mix spans the synth range", groups[0].lowKey, Recipe::SynthLowKeyWithDrums);
+        ++checks; if (groups[0].constantPitch() || groups[0].oneShot()) fail ("synth", "the mix tracks the key", 1, 0);
+        ++checks; if (groups[0].zone1.transpose != 0 || groups[0].zone1.fine != 0) fail ("synth", "the mix is not retuned by its zone", groups[0].zone1.fine, 0);
 
-        // A detune of four cents is one sixteenth of a semitone, the machine's step: flat is
-        // the high byte -1 and the low 255, sharp is 0 and 1.
-        ++checks; if (groups[0].zone1.transpose != -1 || groups[0].zone1.fine != 255) fail ("synth", "OSC1 -4 cents", groups[0].zone1.fine, 255);
-        ++checks; if (groups[1].zone1.transpose != 0  || groups[1].zone1.fine != 1)   fail ("synth", "OSC2 +4 cents", groups[1].zone1.fine, 1);
-        ++checks; if (groups[0].zone1.pitchOffset() != -1.0 / 16) fail ("synth", "OSC1 plays a sixteenth flat", (int) (groups[0].zone1.pitchOffset() * 16), -1);
-        ++checks; if (groups[1].zone1.pitchOffset() !=  1.0 / 16) fail ("synth", "OSC2 plays a sixteenth sharp", (int) (groups[1].zone1.pitchOffset() * 16), 1);
-
-        // A disk from before v0.5.0 is spotted, so a saved project can render it again - and
-        // one written the new way, or tuned by hand, is not.
+        /*
+         * The loop: both saws, four cents either side, each a whole number of cycles in it
+         * and within a cent of where it was asked for - and the whole at middle C, since the
+         * sample is written at its root.
+         */
         {
-            ++checks; if (hasOldTuning (r, d)) fail ("synth", "a new disk is not taken for an old one", 1, 0);
+            const MixPlan plan = planMix (r);
+            ++checks; if (plan.oscs.size() != 2) fail ("synth", "two oscillators in the mix", (int) plan.oscs.size(), 2);
+            for (double e : plan.errorCents)
+            {
+                ++checks; if (std::abs (e) > 1.0) fail ("synth", "each lands within a cent", (int) std::lround (e * 100), 100);
+            }
+            ++checks; if (plan.cycles.size() == 2 && plan.cycles[0] >= plan.cycles[1]) fail ("synth", "the flat saw has fewer cycles", plan.cycles[0], plan.cycles[1]);
 
-            Disk old = d;
+            const double seconds = plan.words / (double) plan.rate;
+            ++checks; if (seconds > 2.6) fail ("synth", "the loop is under 2.6 seconds", (int) (seconds * 1000), 2600);
+
+            const double root = plan.rootCycles * (double) plan.rate / plan.words;
+            ++checks; if (std::abs (1200.0 * std::log2 (root / RootHz)) > 1.0) fail ("synth", "the loop is at middle C", (int) root, (int) RootHz);
+
+            // Octaves need no long loop: a saw and one an octave down fit in four cycles.
+            Recipe octaves = r;
+            octaves.osc[0].fine = 0; octaves.osc[1].fine = 0; octaves.osc[1].octave = -1;
+            const MixPlan short_ = planMix (octaves);
+            ++checks; if (short_.rootCycles > 8) fail ("synth", "octaves make a short loop", short_.rootCycles, 8);
+        }
+
+        // One note is ONE voice, which is the point: before, this patch took two a note.
+        {
+            auto patch1 = d.buildPatch (*prog);
+            s950::Engine engine (44100.0);
+            engine.setPatch (patch1);
+            std::vector<float> buffer (512);
+            engine.noteOn (72, 100);
+            engine.render (buffer.data(), 512);
+            ++checks; if (engine.getActiveVoices() != 1) fail ("synth", "a note of the mix is one voice", engine.getActiveVoices(), 1);
+        }
+
+        /*
+         * A disk from before the mix - a keygroup per oscillator - is spotted, so a saved
+         * project renders it again; and rendering over it brings the first oscillator's
+         * Program tab settings across to the mix.
+         */
+        {
+            ++checks; if (hasOldTuning (r, d))           fail ("synth", "a new disk is not taken for an old-tuned one", 1, 0);
+            ++checks; if (hasSeparateOscillators (r, d)) fail ("synth", "a new disk is not taken for the old layout", 1, 0);
+
+            Disk old = Disk::blank ("FAT SAW DISK");
+            Disk::NewSample s;
+            s.name = "OSC1"; s.words12 = oscillatorWave (r.osc[0], cache); s.rate = 40000; s.rootNote = RootNote; s.loopMode = 'L';
+            std::string e2;
+            old.addSample (s, e2);
+            old.addProgram ("FAT SAW", 1, e2);
             const Disk::Entry* p = old.find ("FAT SAW", 'P');
-            old.setKeygroupParam (*p, 0, KeygroupParam::Zone1Transpose, -1);    // -4 cents, the old way
-            old.setKeygroupParam (*p, 0, KeygroupParam::Zone1Fine,      246);
-            old.setKeygroupParam (*p, 1, KeygroupParam::Zone1Transpose, 0);     // +4 cents, the old way
-            old.setKeygroupParam (*p, 1, KeygroupParam::Zone1Fine,      10);
-            ++checks; if (! hasOldTuning (r, old)) fail ("synth", "a pre-0.5.0 synth disk is spotted", 0, 1);
+            old.setZoneSample (*p, 0, 0, "OSC1");
+            old.setKeygroupParam (*p, 0, KeygroupParam::VcaDecay, 66);
+            old.rebuildPointers();
 
-            Disk byHand = old;
-            const Disk::Entry* q = byHand.find ("FAT SAW", 'P');
-            byHand.setKeygroupParam (*q, 1, KeygroupParam::Zone1Fine, 32);       // somebody retuned OSC2
-            ++checks; if (hasOldTuning (r, byHand)) fail ("synth", "a hand-tuned disk is left alone", 1, 0);
+            ++checks; if (! hasSeparateOscillators (r, old)) fail ("synth", "the old layout is spotted", 0, 1);
+
+            Disk moved;
+            ++checks; if (! render (r, cache, &old, moved, why)) fail ("synth", why.c_str(), 0, 1);
+            const Disk::Entry* mp = moved.find ("FAT SAW", 'P');
+            ++checks; if (mp == nullptr || moved.getKeygroupParam (*mp, 0, KeygroupParam::VcaDecay) != 66)
+                fail ("synth", "OSC1's settings come across to the mix", mp ? moved.getKeygroupParam (*mp, 0, KeygroupParam::VcaDecay) : -1, 66);
+            ++checks; if (hasSeparateOscillators (r, moved)) fail ("synth", "and the re-render is the new layout", 1, 0);
         }
 
         // the drums: one key each on GM's notes, constant pitch, one-shot, and the ride left out
         bool sawRide = false;
-        for (std::size_t k = 2; k < groups.size(); ++k)
+        for (std::size_t k = 1; k < groups.size(); ++k)
         {
             const auto& g = groups[k];
             ++checks; if (g.lowKey != g.highKey)             fail ("synth", "a drum is one key wide", g.highKey, g.lowKey);
@@ -571,11 +617,11 @@ int main (int argc, char** argv)
 
         // it plays
         auto patch = d.buildPatch (*prog);
-        ++checks; if (patch == nullptr || patch->keygroups.size() != 10) fail ("synth", "the engine builds all ten", patch ? (int) patch->keygroups.size() : 0, 10);
+        ++checks; if (patch == nullptr || patch->keygroups.size() != 9) fail ("synth", "the engine builds all nine", patch ? (int) patch->keygroups.size() : 0, 9);
 
-        // A Program tab edit survives a re-render: change OSC1's decay on the disk, render
+        // A Program tab edit survives a re-render: change the mix's decay on the disk, render
         // again with a different level and a different OSC1 wave, and the decay is still
-        // there while the level moved.
+        // there while the sound moved.
         d.setKeygroupParam (*prog, 0, KeygroupParam::VcaDecay, 77);
         r.osc[0].level = 50;
         r.osc[0].intensity = 20;                    // a different wave under the same name
@@ -586,14 +632,15 @@ int main (int argc, char** argv)
         const Disk::Entry* prog2 = again.find ("FAT SAW", 'P');
         ++checks; if (prog2 == nullptr) { fail ("synth", "re-rendered programme", 0, 1); return 1; }
         ++checks; if (again.getKeygroupParam (*prog2, 0, KeygroupParam::VcaDecay) != 77) fail ("synth", "a Program tab edit survives a re-render", again.getKeygroupParam (*prog2, 0, KeygroupParam::VcaDecay), 77);
-        ++checks; if (again.getKeygroupParam (*prog2, 0, KeygroupParam::Zone1Loudness) != -25) fail ("synth", "and the recipe's own knob moved", again.getKeygroupParam (*prog2, 0, KeygroupParam::Zone1Loudness), -25);
+        ++checks; if (again.getKeygroupParam (*prog2, 0, KeygroupParam::Zone1Loudness) != 0) fail ("synth", "the level is in the mix, not the zone", again.getKeygroupParam (*prog2, 0, KeygroupParam::Zone1Loudness), 0);
 
-        // the cache did its job: three oscillator waves (OSC1 twice), eight drums
+        // The cache did its job: the two mixes, eight drums, and OSC1's own wave from the
+        // old-layout disk above.
         ++checks; if (cache.waves.size() != 11) fail ("synth", "the wave cache holds each wave once", (int) cache.waves.size(), 11);
 
         // Rebuilding the patch from the new disk reuses the samples whose bytes did not
-        // change - OSC2 and the drums - and decodes afresh the one that did, OSC1, though
-        // its name is the same. That is what keeps a held note following an edit.
+        // change - the drums - and decodes afresh the one that did, the mix, though its
+        // name is the same. That is what keeps a held note following an edit.
         {
             auto before = d.buildPatch (*prog);
             auto after  = again.buildPatch (*prog2, before.get());
@@ -602,9 +649,9 @@ int main (int argc, char** argv)
                 fail ("synth", "both patches build", 0, 1);
             else
             {
-                ++checks; if (after->keygroups[0].sound == before->keygroups[0].sound) fail ("synth", "a re-rendered OSC1 is a new sound", 1, 0);
-                ++checks; if (after->keygroups[1].sound != before->keygroups[1].sound) fail ("synth", "an unchanged OSC2 is the same sound", 0, 1);
-                ++checks; if (after->keygroups[2].sound != before->keygroups[2].sound) fail ("synth", "an unchanged drum is the same sound", 0, 1);
+                ++checks; if (after->keygroups[0].sound == before->keygroups[0].sound) fail ("synth", "a re-rendered mix is a new sound", 1, 0);
+                ++checks; if (after->keygroups[1].sound != before->keygroups[1].sound) fail ("synth", "an unchanged drum is the same sound", 0, 1);
+                ++checks; if (after->keygroups[2].sound != before->keygroups[2].sound) fail ("synth", "and so is the next", 0, 1);
             }
         }
 

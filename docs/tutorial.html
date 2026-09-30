@@ -549,8 +549,9 @@ plays exactly as the machine would:</p>
 </figure>
 
 <p>The plugin can make its own sounds, and it makes them <em>as a disk</em>. Each of the three
-<strong>oscillators</strong> is drawn as a few looped cycles of a waveform, built from its
-harmonics so it never aliases, and becomes a keygroup layered across the keyboard; the
+<strong>oscillators</strong> is drawn from its harmonics so it never aliases, and the three
+are mixed into <strong>one looped sample</strong> played across the keyboard, so every note
+is a single voice and mono and glide move the whole sound; the
 <strong>drums</strong> are one-shots on General MIDI's notes (kick 36, snare 38, clap 39, hats
 42 and 46, ride 51, toms 41, 43 and 45). The lot is written to a blank disk held in memory,
 and that disk becomes the loaded one — so the Program tab edits it, Glide and Wide work on
@@ -559,8 +560,8 @@ it, the set saves it, and <strong>Save disk as…</strong> puts it on a floppy f
 <p>An oscillator has a <strong>kind</strong> (sine, triangle, saw, square, pulse, organ,
 glass, buzz, hollow, FM at three ratios, ring modulation at two, a bend, phase distortion,
 and white, pink and brown noise), a <strong>level</strong>, <strong>octave</strong>,
-<strong>fine</strong> tune (detune is two layers a few cents apart — the classic wide
-sound), a start <strong>phase</strong>, a <strong>shape</strong> control whose meaning follows
+<strong>fine</strong> tune (two oscillators a few cents apart is the classic wide sound, and
+the beating between them is drawn into the loop), a start <strong>phase</strong>, a <strong>shape</strong> control whose meaning follows
 the kind — pulse width, FM index, ring amount, bend, skew, or, for a plain shape, how far it
 softens toward a sine — and a <strong>sweep</strong>: how much of that shape travels across the
 loop and back. That is pulse-width modulation, an FM sweep or a filter-like morph baked into

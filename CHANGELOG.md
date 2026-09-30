@@ -34,6 +34,32 @@ Getting there took two engine changes:
 A session saved with a Rate trim will now play at a different rate, since the scale
 changed from units to octaves.
 
+### Synth tab: the oscillators are mixed into one voice
+
+Reported: in synth mode, notes used more voices than they should, and with glide on a
+single voice you could hear oscillators being dropped. Each oscillator was its own keygroup,
+so one note of a three-oscillator patch took three of the eight voices (six with Wide), and
+mono sounds only a programme's first keygroup.
+
+The oscillators are now mixed into **one looped sample**, one keygroup, **one voice a
+note**, so mono and glide move the whole sound and eight notes are eight notes.
+
+- **Detune:** a loop plays at one pitch, so a detune can't join in a few cycles. The loop is
+  made just long enough for every oscillator to complete whole cycles within a cent of its
+  setting, 1.1 to 1.3 s for the detuned presets and at most 2.5 s. The beating is drawn into
+  it. The old keygroups could only tune in the S950's 6.25-cent steps, so this is closer.
+- **Octaves** still fit in a few cycles.
+- **Sweeps** keep their speed as whole round trips.
+- **Level** is balanced in the mix with the same decibels the zone loudness used to give it.
+
+A saved project whose synth disk has the old keygroup-per-oscillator layout is rendered again
+when it loads, and the first oscillator's Program tab settings (envelopes, filter, LFO) come
+across to the mix. The single oscillator waves are unchanged: still word for word the C#
+tool's (`synthcheck.ps1`, 45 of 45).
+
+A multi-oscillator patch may be a few decibels quieter than before, because it's now one
+voice at full scale instead of several summed.
+
 ### LFO tempo sync
 
 A **Sync** switch under the LFO's Shape box, on MIDI CC 115. While it's on, the Rate knob

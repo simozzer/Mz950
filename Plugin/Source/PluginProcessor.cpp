@@ -994,7 +994,14 @@ void VirtualS950Processor::setStateInformation (const void* data, int size)
      * right way and keeps every setting a render keeps. Only a disk carrying exactly the old
      * bytes is redone; tuning set by hand on the Program tab is left as it is.
      */
-    if (synthDisk && disk != nullptr && s950::synth::hasOldTuning (recipe, *disk))
+    /*
+     * Likewise a Synth-tab disk from before the oscillators were mixed into one loop: a
+     * keygroup each, so a three-oscillator patch took three voices a note and mono sounded
+     * only the first. Rendered again it is one keygroup, and its Program tab settings come
+     * across from the first oscillator's - see synth::render.
+     */
+    if (synthDisk && disk != nullptr
+        && (s950::synth::hasOldTuning (recipe, *disk) || s950::synth::hasSeparateOscillators (recipe, *disk)))
         setRecipe (recipe);
 }
 

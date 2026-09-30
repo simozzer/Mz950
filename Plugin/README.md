@@ -56,8 +56,11 @@ violet is something the S950 never had.
   tune, start phase, a *shape* control (pulse width, FM index, ring amount, bend, skew, or a
   morph toward a sine) and a *sweep* (how much of that travels across the loop and back:
   pulse-width modulation, an FM sweep, a filter-like morph, baked into the sample the way a
-  sampler has always done it). Each oscillator is drawn as a band-limited looped sample and
-  becomes a keygroup layered across the keyboard; detune is two layers a few cents apart.
+  sampler has always done it). The oscillators are drawn band-limited and **mixed into one
+  looped sample**, so a note is one voice however many oscillators it has. That keeps all
+  eight notes of polyphony, and mono and glide move the whole sound. A detune's beating is
+  drawn into the loop, which is made just long enough (up to about 2.5 s) for every
+  oscillator to complete whole cycles within a cent of its setting.
   An optional kit — kick, snare, clap, closed and open hat, ride, three toms — puts one-shots
   on General MIDI's notes (36–51), each with tune, decay, tone and level, and the oscillators
   move up to start at E2. Ten presets to start from. A change re-renders to a blank disk

@@ -11,12 +11,13 @@
  *
  * The recipe is a handful of numbers a window can show as knobs. Rendering it is:
  *
- *   - one SAMPLE per oscillator that is on, a few looped cycles drawn from harmonics
- *     (Synth.h), and one per drum that is on, a one-shot;
- *   - one PROGRAMME, with a keygroup per oscillator layered across the keyboard - which
- *     is how a sampler does detune: two layers a few cents apart, not two oscillators in
- *     one loop, since two pitches in one loop would not join - and a keygroup per drum on
- *     its General MIDI note, constant pitch and one-shot;
+ *   - one SAMPLE holding every oscillator that is on, mixed into a single loop drawn from
+ *     harmonics (Synth.h) - long enough that a detune's two pitches both join, see
+ *     planMix - and one per drum that is on, a one-shot;
+ *   - one PROGRAMME, with one keygroup for the oscillators across the keyboard, so a note
+ *     is one voice, and a keygroup per drum on its General MIDI note, constant pitch and
+ *     one-shot. (It was a keygroup per oscillator until v0.6.1, which made a three-oscillator
+ *     note three voices and left mono sounding only the first.)
  *   - all of it on a blank disk, built by Disk::addSample / addProgram, so the result is
  *     an S950 disk like any other: the Program tab edits it, the set saves it, and it goes
  *     to a real machine.
@@ -117,6 +118,46 @@ namespace s950::synth
 
     /// The words for one oscillator, cached.
     const std::vector<short>& oscillatorWave (const OscSettings& o, WaveCache& cache);
+
+    /*
+     * THE OSCILLATORS, MIXED INTO ONE LOOP - ONE VOICE A NOTE
+     *
+     * The oscillators are summed into a single looped sample, so a note is one voice
+     * whatever the patch: eight notes of polyphony stay eight, mono and glide move the whole
+     * sound, and nothing is stolen out from under a chord.
+     *
+     * A loop plays at one pitch, so every oscillator has to complete a whole number of
+     * cycles in it. Octaves do that in a loop of a few cycles; a detune does not - two saws
+     * five cents apart only line up again after hundreds of cycles, which is why the first
+     * design gave each oscillator its own keygroup. So the loop is as long as it needs to
+     * be: the shortest, up to about two and a half seconds, in which every oscillator lands
+     * within a cent of its setting (the S950 itself tunes in 6.25-cent steps). The beating
+     * of a detune is then baked into the loop, as it would be in a sample of the real thing.
+     *
+     * A sweep keeps its speed as nearly as whole round trips allow.
+     */
+    struct MixPlan
+    {
+        int rate  = 0;                       // the sample rate the mix is drawn at
+        int words = 0;                       // the loop's length
+        int rootCycles = 0;                  // cycles of middle C in it - the sample's pitch
+        std::vector<int>    oscs;            // which oscillators are in it, 0..2
+        std::vector<int>    cycles;          // each one's whole cycles in the loop
+        std::vector<int>    sweepTrips;      // each one's sweep round trips in the loop
+        std::vector<double> errorCents;      // how far each one lands from its setting
+    };
+
+    MixPlan planMix (const Recipe& recipe);
+
+    /// The oscillators as one looped sample, cached; `plan` says how it was drawn.
+    const std::vector<short>& mixedWave (const Recipe& recipe, WaveCache& cache, MixPlan& plan);
+
+    /// The name the mix is written under.
+    inline constexpr const char* MixSampleName = "OSC MIX";
+
+    /// Whether `disk` holds the recipe's programme in the old layout, one keygroup per
+    /// oscillator - a disk from before the mix, which a load renders again.
+    bool hasSeparateOscillators (const Recipe& recipe, const Disk& disk);
 
     /// The recipe as a disk. `previous` is the disk this replaces, for the settings it keeps.
     bool render (const Recipe& recipe, WaveCache& cache, const Disk* previous, Disk& out, std::string& error);

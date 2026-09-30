@@ -1,5 +1,6 @@
 #include "SynthPatch.h"
 #include "Synth.h"
+#include "Cal.h"
 
 #include <algorithm>
 #include <cmath>
@@ -159,36 +160,49 @@ namespace s950::synth
             }
         }
 
-        std::vector<short> drawWave (const OscSettings& o)
-        {
-            const bool sweeping = o.sweep > 0 && oscKindLabels (o.kind).hasSweep;
-            const int  rate     = rateFor (o.kind, sweeping);
-            const int  h        = waveforms::highestHarmonic (rate, RootHz);
-            const double x      = o.intensity / 99.0;
+        bool sweeps (const OscSettings& o) { return o.sweep > 0 && oscKindLabels (o.kind).hasSweep; }
 
-            std::vector<short> words;
+        /*
+         * What an oscillator is made of, as a table of spectra up to harmonic `h`: one for a
+         * still wave, a round trip through five for one that sweeps. Shared by the single
+         * wave below and the mix, so the two cannot come to mean different things.
+         */
+        std::vector<Spectrum> tableFor (const OscSettings& o, int h)
+        {
+            const double x = o.intensity / 99.0;
 
             if (isNoise (o.kind))
             {
                 const auto colour = o.kind == OscKind::noiseWhite ? NoiseColour::white
                                   : o.kind == OscKind::noisePink  ? NoiseColour::pink : NoiseColour::brown;
-                words = waveforms::render ({ noise::spectrum (colour, 101, h) }, 32, rate, RootHz);
+                return { noise::spectrum (colour, 101, h) };
             }
-            else if (sweeping)
+
+            if (sweeps (o))
             {
                 // From the intensity set down toward nothing, by the sweep amount, and back.
                 const double depth = o.sweep / 99.0;
-                const auto table = waveforms::mirror (waveforms::steps (5, [&] (double t)
+                return waveforms::mirror (waveforms::steps (5, [&] (double t)
                 {
                     return spectrumFor (o.kind, x * (1.0 - depth * t), h);
                 }));
-                words = waveforms::render (table, 96, rate, RootHz);
             }
-            else
-            {
-                const std::vector<Spectrum> one { spectrumFor (o.kind, x, h) };
-                words = waveforms::render (one, rate == 40000 ? waveforms::PlainCycles : 96, rate, RootHz);
-            }
+
+            return { spectrumFor (o.kind, x, h) };
+        }
+
+        std::vector<short> drawWave (const OscSettings& o)
+        {
+            const bool sweeping = sweeps (o);
+            const int  rate     = rateFor (o.kind, sweeping);
+            const int  h        = waveforms::highestHarmonic (rate, RootHz);
+            const auto table    = tableFor (o, h);
+
+            const int cycles = isNoise (o.kind)            ? 32
+                             : sweeping || rate != 40000  ? 96
+                             :                              waveforms::PlainCycles;
+
+            std::vector<short> words = waveforms::render (table, cycles, rate, RootHz);
 
             // The start phase: a looped wave rotated is the same wave started elsewhere.
             if (o.phase > 0 && ! words.empty())
@@ -217,6 +231,217 @@ namespace s950::synth
         if (found == cache.waves.end())
             found = cache.waves.emplace (key, drawWave (o)).first;
         return found->second;
+    }
+
+    // ------------------------------------------------------------------ the mix
+
+    namespace
+    {
+        /// How far above middle C an oscillator sounds: its octave and its fine tune.
+        double ratioOf (const OscSettings& o)
+        {
+            return std::pow (2.0, o.octave + std::max (-50, std::min (50, o.fine)) / 1200.0);
+        }
+
+        /// A sweep's round trip, in cycles of the oscillator - what the single wave used.
+        constexpr int SweepCycles = 96;
+
+        /// The longest loop the mix may take, in cycles of middle C: about 2.5 seconds.
+        constexpr int MaxRootCycles = 654;
+
+        /// How close to its setting an oscillator must land, in cents.
+        constexpr double CentsTolerance = 1.0;
+    }
+
+    MixPlan planMix (const Recipe& recipe)
+    {
+        MixPlan plan;
+        plan.rate = 40000;
+
+        int shortest = 1;
+        for (int i = 0; i < 3; ++i)
+        {
+            const auto& o = recipe.osc[i];
+            if (o.kind == OscKind::off) continue;
+
+            plan.oscs.push_back (i);
+            plan.rate = std::min (plan.rate, rateFor (o.kind, sweeps (o)));
+
+            // A sweeping oscillator needs the loop to hold at least one round trip of it.
+            if (sweeps (o))
+                shortest = std::max (shortest, static_cast<int> (std::ceil (SweepCycles / ratioOf (o))));
+        }
+
+        if (plan.oscs.empty()) return plan;
+
+        /*
+         * The shortest loop in which every oscillator's cycles come out whole and within the
+         * tolerance - or, if none does within the limit, the one that comes closest. Four
+         * cycles of middle C at least, which is where the two octaves down land whole.
+         */
+        int    best = -1;
+        double bestWorst = 1e9;
+
+        for (int n = std::max (4, shortest); n <= MaxRootCycles; ++n)
+        {
+            double worst = 0.0;
+            for (int i : plan.oscs)
+            {
+                const double want = n * ratioOf (recipe.osc[i]);
+                const double got  = std::max (1.0, std::round (want));
+                worst = std::max (worst, std::abs (1200.0 * std::log2 (got / want)));
+            }
+
+            if (worst < bestWorst) { bestWorst = worst; best = n; }
+            if (worst <= CentsTolerance) break;
+        }
+
+        plan.rootCycles = best;
+        plan.words      = waveforms::wordsFor (best, plan.rate, RootHz);
+
+        for (int i : plan.oscs)
+        {
+            const auto& o    = recipe.osc[i];
+            const double want = best * ratioOf (o);
+            const int    got  = std::max (1, static_cast<int> (std::lround (want)));
+
+            plan.cycles.push_back (got);
+            plan.errorCents.push_back (1200.0 * std::log2 (got / want));
+            plan.sweepTrips.push_back (sweeps (o) ? std::max (1, static_cast<int> (std::lround (got / (double) SweepCycles))) : 0);
+        }
+
+        return plan;
+    }
+
+    namespace
+    {
+        /// Harmonic n of a table at position t (0..1 around the round trip), as the single
+        /// wave's renderer reads it: smoothstep between neighbouring spectra, wrapping.
+        void harmonicAt (const std::vector<Spectrum>& table, int n, double t, double& c, double& s)
+        {
+            auto coef = [n] (const Spectrum& sp, double& cc, double& ss)
+            {
+                cc = n <= sp.harmonics() ? sp.cos[(std::size_t) n] : 0.0;
+                ss = n <= sp.harmonics() ? sp.sin[(std::size_t) n] : 0.0;
+            };
+
+            if (table.size() == 1) { coef (table[0], c, s); return; }
+
+            const double pos  = t * (double) table.size();
+            const int    ix   = static_cast<int> (pos);
+            const double frac = pos - ix;
+            const double m    = frac * frac * (3.0 - 2.0 * frac);
+
+            double ac, as, bc, bs;
+            coef (table[(std::size_t) (ix % (int) table.size())], ac, as);
+            coef (table[(std::size_t) ((ix + 1) % (int) table.size())], bc, bs);
+            c = ac * (1 - m) + bc * m;
+            s = as * (1 - m) + bs * m;
+        }
+
+        /*
+         * One oscillator across the whole loop, additively: harmonic by harmonic, each turned
+         * by a rotating phasor rather than a cosine a sample - a loop of seconds times dozens
+         * of harmonics is millions of samples, and a rotation is a multiply. Renormalised
+         * every so often so rounding cannot shrink or swell it over the length.
+         */
+        std::vector<double> drawInMix (const OscSettings& o, int cycles, int trips, int words, int rate)
+        {
+            // this oscillator's own pitch, with the sample at its root: its cycles in the loop
+            // over the loop's length - which sets how many harmonics fit below the Nyquist
+            const double hz = cycles * static_cast<double> (rate) / words;
+            const int    h  = waveforms::highestHarmonic (rate, hz);
+            const auto table = tableFor (o, h);
+
+            const double pi    = 3.14159265358979323846;
+            const double start = o.phase / 99.0 * 2.0 * pi;    // where in its cycle it begins
+
+            std::vector<double> wave ((std::size_t) words, 0.0);
+
+            for (int n = 1; n <= h; ++n)
+            {
+                bool used = false;
+                for (const auto& sp : table)
+                    if (n <= sp.harmonics() && (sp.cos[(std::size_t) n] != 0.0 || sp.sin[(std::size_t) n] != 0.0))
+                        { used = true; break; }
+                if (! used) continue;
+
+                const double step = 2.0 * pi * n * cycles / words;
+                const double rc = std::cos (step), rs = std::sin (step);
+                double pc = std::cos (n * start), ps = std::sin (n * start);
+
+                double c = 0.0, s = 0.0;
+                if (table.size() == 1) harmonicAt (table, n, 0.0, c, s);
+
+                for (int i = 0; i < words; ++i)
+                {
+                    if (table.size() > 1)
+                    {
+                        double t = trips * (i / (double) words);
+                        t -= std::floor (t);
+                        harmonicAt (table, n, t, c, s);
+                    }
+
+                    wave[(std::size_t) i] += c * pc + s * ps;
+
+                    const double nc = pc * rc - ps * rs;
+                    ps = pc * rs + ps * rc;
+                    pc = nc;
+
+                    if ((i & 1023) == 1023)
+                    {
+                        const double len = std::sqrt (pc * pc + ps * ps);
+                        pc /= len; ps /= len;
+                    }
+                }
+            }
+
+            // Each oscillator at full scale before its level, as each one's own sample was.
+            double peak = 0.0;
+            for (double v : wave) peak = std::max (peak, std::abs (v));
+            if (peak > 0.0) for (auto& v : wave) v /= peak;
+
+            return wave;
+        }
+
+        std::string mixKey (const Recipe& r)
+        {
+            std::string key = "mix";
+            for (int i = 0; i < 3; ++i)
+            {
+                const auto& o = r.osc[i];
+                if (o.kind == OscKind::off) continue;
+                key += "|" + std::to_string (i) + ":" + waveKey (o) + ":" + std::to_string (o.octave)
+                     + ":" + std::to_string (o.fine) + ":" + std::to_string (o.level);
+            }
+            return key;
+        }
+    }
+
+    const std::vector<short>& mixedWave (const Recipe& recipe, WaveCache& cache, MixPlan& plan)
+    {
+        plan = planMix (recipe);
+
+        const auto key = mixKey (recipe);
+        auto found = cache.waves.find (key);
+        if (found != cache.waves.end()) return found->second;
+
+        std::vector<double> mix ((std::size_t) std::max (0, plan.words), 0.0);
+
+        for (std::size_t k = 0; k < plan.oscs.size(); ++k)
+        {
+            const auto& o = recipe.osc[plan.oscs[k]];
+
+            // The level knob as it always sounded: the zone loudness it used to write, in
+            // the machine's own decibels a unit - 99 is full, 0 is twenty decibels down.
+            const int    units = -50 + (std::max (0, std::min (99, o.level)) * 50) / 99;
+            const double gain  = std::pow (10.0, units * cal::LoudnessDbPerUnit / 20.0);
+
+            const auto one = drawInMix (o, plan.cycles[k], plan.sweepTrips[k], plan.words, plan.rate);
+            for (std::size_t i = 0; i < mix.size(); ++i) mix[i] += one[i] * gain;
+        }
+
+        return cache.waves.emplace (key, waveforms::quantise (mix)).first->second;
     }
 
     // ----------------------------------------------------------------- rendering
@@ -259,20 +484,19 @@ namespace s950::synth
         struct Layer { std::string sample; bool drum; int osc; int slot; };
         std::vector<Layer> layers;
 
-        for (int i = 0; i < 3; ++i)
+        // The oscillators, mixed into one looped sample - one keygroup, one voice a note.
+        if (recipe.anyOscillator())
         {
-            const auto& o = recipe.osc[i];
-            if (o.kind == OscKind::off) continue;
-
+            MixPlan plan;
             Disk::NewSample s;
-            s.name     = "OSC" + std::to_string (i + 1);
-            s.words12  = oscillatorWave (o, cache);
-            s.rate     = rateFor (o.kind, o.sweep > 0 && oscKindLabels (o.kind).hasSweep);
+            s.name     = MixSampleName;
+            s.words12  = mixedWave (recipe, cache, plan);
+            s.rate     = plan.rate;
             s.rootNote = RootNote;
             s.loopMode = 'L';
 
             if (! d.addSample (s, error)) return false;
-            layers.push_back ({ s.name, false, i, -1 });
+            layers.push_back ({ s.name, false, -1, -1 });
         }
 
         if (recipe.drumsOn)
@@ -348,7 +572,13 @@ namespace s950::synth
 
             if (was != nullptr)
             {
-                const int from = keygroupPlaying (*previous, *was, layer.sample);
+                // A disk from before the mix had a keygroup per oscillator: the mix takes its
+                // settings from the first of those, so a Program tab edit survives the move.
+                int from = keygroupPlaying (*previous, *was, layer.sample);
+                if (from < 0 && ! layer.drum)
+                    for (const char* old : { "OSC1", "OSC2", "OSC3" })
+                        if ((from = keygroupPlaying (*previous, *was, old)) >= 0) break;
+
                 if (from >= 0)
                 {
                     static const P kept[] = {
@@ -368,24 +598,15 @@ namespace s950::synth
 
             if (! layer.drum)
             {
-                const auto& o = recipe.osc[layer.osc];
-
                 put (d, *program, k, P::LowKey,  synthLow);
                 put (d, *program, k, P::HighKey, 127);
                 put (d, *program, k, P::ConstantPitch, 0);
                 put (d, *program, k, P::OneShot, 0);
 
-                // Transpose and fine are one signed 16-bit count of SIXTEENTHS of a semitone,
-                // transpose the high byte - measured, see Disk::Zone::pitchOffset. So an
-                // octave is 192 and the machine tunes in 6.25-cent steps: a detune of a few
-                // cents is one step, and a flat one borrows from the high byte.
-                const int cents      = std::max (-50, std::min (50, o.fine));
-                const int sixteenths = o.octave * 12 * 16
-                                     + static_cast<int> (std::lround (cents * 16.0 / 100.0));
-                const int high       = sixteenths >= 0 ? sixteenths / 256 : -((255 - sixteenths) / 256);
-                put (d, *program, k, P::Zone1Transpose, high);
-                put (d, *program, k, P::Zone1Fine,      sixteenths - high * 256);
-                put (d, *program, k, P::Zone1Loudness,  -50 + (std::max (0, std::min (99, o.level)) * 50) / 99);
+                // Octave, fine and level are in the mix itself now - the zone plays it as is.
+                put (d, *program, k, P::Zone1Transpose, 0);
+                put (d, *program, k, P::Zone1Fine,      0);
+                put (d, *program, k, P::Zone1Loudness,  0);
             }
             else
             {
@@ -508,6 +729,16 @@ namespace s950::synth
         }();
 
         return all;
+    }
+
+    bool hasSeparateOscillators (const Recipe& recipe, const Disk& disk)
+    {
+        for (const auto& e : disk.getEntries())
+            if (e.type == 'P' && e.name == Disk::normaliseNameFor (recipe.name))
+                for (const auto& k : disk.keygroups (e))
+                    if (k.zone1.name == "OSC1" || k.zone1.name == "OSC2" || k.zone1.name == "OSC3")
+                        return true;
+        return false;
     }
 
     bool hasOldTuning (const Recipe& recipe, const Disk& disk)

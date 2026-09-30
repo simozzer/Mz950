@@ -182,7 +182,9 @@ add_executable(DiskEditCheck
     Source/S950/Disk.cpp
     Source/S950/Synth.cpp
     Source/S950/SynthPatch.cpp
-    Source/S950/Hfe.cpp)
+    Source/S950/Hfe.cpp
+    Source/S950/Engine.cpp
+    Source/S950/Voice.cpp)
 
 target_include_directories(DiskEditCheck PRIVATE Source/S950 Tests)
 

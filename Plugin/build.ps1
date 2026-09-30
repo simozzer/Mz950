@@ -109,7 +109,10 @@ else {
         (Join-Path $root "Source\S950\Disk.cpp"),
         (Join-Path $root "Source\S950\Synth.cpp"),
         (Join-Path $root "Source\S950\SynthPatch.cpp"),
-        (Join-Path $root "Source\S950\Hfe.cpp")
+        (Join-Path $root "Source\S950\Hfe.cpp"),
+        # the engine, so a rendered synth disk can be played and its voices counted
+        (Join-Path $root "Source\S950\Engine.cpp"),
+        (Join-Path $root "Source\S950\Voice.cpp")
     )
     $quotedDisk = ($diskSources | ForEach-Object { "`"$_`"" }) -join " "
     cmd /c "call `"$vcvars`" >nul 2>&1 && cd /d `"$Out`" && cl /nologo /std:c++17 /EHsc /W4 /O2 /I `"$include`" $quotedDisk /Fe:`"$editCheck`"" | Out-Null
