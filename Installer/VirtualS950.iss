@@ -29,7 +29,7 @@
 #define AppName        "Mz950"
 #define AppVersion     "0.6.2"
 #define AppPublisher   "Simon Moscrop"
-#define AppCopyright   "Copyright (C) 2026 Simon Moscrop"
+#define AppCopyright   "Created by Simon Moscrop"
 #define AppURL         "https://github.com/simozzer/Mz950"
 
 #define RepoRoot       ".."

@@ -2291,7 +2291,7 @@ namespace AkaiS950Studio
                 Environment.NewLine + Environment.NewLine +
 
                 // The licence asks an interactive program to say so where it can be seen.
-                "Copyright (C) 2026 Simon Moscrop" + Environment.NewLine +
+                "Created by Simon Moscrop" + Environment.NewLine +
                 "Licensed under the GNU Affero General Public License v3." +
                 Environment.NewLine +
                 "This program comes with ABSOLUTELY NO WARRANTY. It is free" +

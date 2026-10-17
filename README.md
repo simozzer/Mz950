@@ -256,7 +256,7 @@ In practice: anyone given a binary is entitled to the source it was built from, 
 same licence, which a public repository satisfies.
 
 ```
-Copyright (C) 2026 Simon Moscrop
+Created by Simon Moscrop
 
 This program is free software: you can redistribute it and/or modify it under the terms
 of the GNU Affero General Public License as published by the Free Software Foundation,
