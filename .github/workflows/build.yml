@@ -218,7 +218,7 @@ jobs:
           - **Mz950 Studio** - open, edit and save S900/S950 disk images (.hfe and .img)
           - **Mz950** - a VST3 that plays those disks back in a DAW
           - **Standalone** - the same emulator without a host
-          - **A sound library** - five disks of synthesised sounds, so it makes a noise
+          - **A sound library** - seven disks of synthesised sounds, a piano among them, so it makes a noise
             without your owning a single floppy
           - **A tutorial**, in the program group and under **Help** in the editor
 

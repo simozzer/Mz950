@@ -6,6 +6,34 @@ Every number here came off a recording of a real S950 rather than out of a manua
 a change is a measurement it says what was measured and what it replaced. Where it is an
 assumption it says that too — those are the ones another afternoon with a recorder settles.
 
+## v0.6.2 — 2026-10-17
+
+A piano. For Windows; the Mac version stays in beta, as for 0.6.1.
+
+### PIANO, a seventh disk in the sound library
+
+A grand piano multisample laid out like the factory ones: nine one-shots from E1 to G5,
+each covering the few keys around it, with no sample stretched more than about four
+semitones. Like the rest of the library it is drawn rather than recorded. Each note is a sum
+of a struck string's partials:
+- stretched sharp by the string's stiffness
+- shaped by where the hammer lands
+- dying in two stages, the upper partials first
+- beating slowly across a two- or three-string unison
+- with a short hammer knock at the front.
+
+The curves behind those were fitted to measurements of a sampled grand of the period, so it
+sits in a mix the way those did.
+
+Four programmes over the same nine samples:
+- **GRAND PNO**: the piano.
+- **BRIGHT PNO**: the filter opened, and velocity pushing it further.
+- **MELLOW PNO**: rounder, with a longer release.
+- **HONKYTONK**: each sample twice, an eighth of a semitone apart. Two voices a note, so it
+  plays four notes at once rather than eight.
+
+The samples total 424,500 words, so the disk loads on a stock S950 as well as in Mz950.
+
 ## v0.6.1 — 2026-09-30
 
 A single voice per synth note, and an LFO that reaches the audio range and locks to your
