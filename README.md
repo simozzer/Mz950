@@ -99,12 +99,18 @@ recorded and nothing is sampled. It has no window and no audio, it is not part o
 Studio and is not installed with it, and the only thing it shares is `AkaiS950List`,
 because it has to write the same format.
 
-Five of the six disks are tuned sounds: a few cycles of a waveform, looped, with the
+Five of the seven disks are tuned sounds: a few cycles of a waveform, looped, with the
 machine's envelope and filter making an instrument of them. The sixth, `DRUMS`, is not.
 A drum's envelope is the sound rather than a setting, so those samples are one-shots
 with the whole shape baked in — three kicks, three snares, three toms, closed, pedal and
 open hats, a clap, a rimshot, a clave, a ride, its bell and a crash, laid out close to
 General MIDI. `Drums.cs` says how each one is drawn and why.
+
+The seventh, `PIANO`, is a grand piano multisample in the factory style: nine one-shots
+from E1 to G5, each a sum of a struck string's partials — stretched by the string's
+stiffness, shaped by the strike point, dying two-stage and beating across a two- or
+three-string unison — under four programmes (`GRAND PNO`, `BRIGHT PNO`, `MELLOW PNO`,
+`HONKYTONK`). It fits a stock S950's memory. `Piano.cs` has the model.
 
 Drums are judged by ear or not at all, and a disk image cannot be played:
 

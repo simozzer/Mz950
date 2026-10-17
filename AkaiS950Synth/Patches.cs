@@ -412,7 +412,11 @@ namespace AkaiS950Synth
                 // treatment is an envelope and a filter, which is precisely what a drum
                 // does not take from the machine.
                 //
-                Disk ("DRUMS", Drums.Programmes(), new List<Patch>())
+                Disk ("DRUMS", Drums.Programmes(), new List<Patch>()),
+
+                // The piano, alone for the same reason as the drums: a multisample of long
+                // one-shots fills a disk, and the machine's memory, by itself.
+                Disk ("PIANO", Piano.Programmes(), new List<Patch>())
             };
         }
 
@@ -611,6 +615,7 @@ namespace AkaiS950Synth
 
             // The drum kit, which is generated a different way and says so - see Drums.
             waves.AddRange(Drums.Waves());
+            waves.AddRange(Piano.Waves());
 
             return waves;
         }
