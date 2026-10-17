@@ -49,6 +49,26 @@ glide, polyphony and Wide; and **Synth**, which makes sounds with no disk at all
 [**CHANGELOG.md**](CHANGELOG.md) is what changed between releases, and is where the notes for
 a tag come from.
 
+### macOS (beta)
+
+Each release has `Mz950-<version>-macOS-beta.zip`: the VST3, an Audio Unit (for Logic and
+GarageBand), the standalone app and the sound library, for Apple Silicon and Intel Macs on
+macOS 11 or later. Mz950 Studio, the disk editor, is Windows-only.
+
+It isn't signed by Apple, which takes a paid developer account, so macOS won't open it with a
+double-click. Unzip it and install it from Terminal instead. Type `bash ` (with the space),
+drag `install.sh` from the unzipped folder into the Terminal window, and press Return:
+
+    bash ~/Downloads/Mz950-<version>-macOS-beta/install.sh
+
+It copies everything into your own Library folders, with no password needed, and clears the
+"downloaded from the internet" flag that would stop your DAW loading the plugin. Then rescan
+plugins in your DAW. `READ ME FIRST.txt` in the zip explains how to install by hand instead.
+
+It's a beta: built and checked on GitHub's Macs, including Apple's own Audio Unit validator,
+but not yet tried on a real one. If something doesn't work, please
+[open an issue](https://github.com/simozzer/Mz950/issues).
+
 ## The parts
 
 | | |

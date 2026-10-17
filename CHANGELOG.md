@@ -6,6 +6,22 @@ Every number here came off a recording of a real S950 rather than out of a manua
 a change is a measurement it says what was measured and what it replaced. Where it is an
 assumption it says that too — those are the ones another afternoon with a recorder settles.
 
+## v0.7.0 — 2026-10-18
+
+The Mac version, on every release, as a beta.
+
+### macOS, in beta, now on every release
+
+`Mz950-<version>-macOS-beta.zip` is attached to every release, not only to pre-releases as it
+was from `v0.6.1-beta1`: the VST3, an Audio Unit for Logic and GarageBand, the standalone app
+and the sound library, universal for Apple Silicon and Intel, macOS 11 or later. It's built
+and checked on GitHub's Macs, and passes Apple's own Audio Unit validator, but nobody has tried
+it on a real Mac yet; the "beta" in its name says so. It isn't notarized, so it's installed
+with one Terminal command, as READ ME FIRST.txt in the zip and the README explain. Mz950
+Studio stays Windows-only.
+
+The sound and the plugin's IDs are unchanged from 0.6.2.
+
 ## v0.6.2 — 2026-10-17
 
 A piano. For Windows; the Mac version stays in beta, as for 0.6.1.

@@ -184,20 +184,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # The Mac zip goes on pre-releases only for now (see the mac job), so only they
-          # say anything about it.
-          $macNotes = ''
-          if ($env:GITHUB_REF_NAME -match '-') {
-              $macNotes = @"
-          ### macOS
+          # The Mac zip, a beta, goes on every release (see the mac job).
+          $macNotes = @"
+          ### macOS (beta)
 
-          **Mz950-*-macOS.zip** has the VST3, an Audio Unit for Logic and GarageBand, the
+          **Mz950-*-macOS-beta.zip** has the VST3, an Audio Unit for Logic and GarageBand, the
           standalone app and the sound library, for Apple Silicon and Intel, macOS 11 or
           later. It isn't notarized by Apple, so macOS won't open it with a double-click:
           install it with one Terminal command, as **READ ME FIRST.txt** inside explains.
-          Mz950 Studio, the disk editor, is Windows-only.
+          Mz950 Studio, the disk editor, is Windows-only. This is a beta: built and checked on
+          GitHub's Macs, but not yet tried on a real one.
           "@
-          }
 
           $notes = @"
           Built from ``$env:GITHUB_SHA`` by GitHub Actions.
@@ -359,7 +356,7 @@ jobs:
       - name: Package
         run: |
           ver=$(sed -n 's/^project(VirtualS950 VERSION \([0-9.]*\).*/\1/p' Plugin/CMakeLists.txt)
-          name="Mz950-$ver-macOS"
+          name="Mz950-$ver-macOS-beta"
           art=Plugin/build/VirtualS950_artefacts/Release
           out="dist/$name"
           mkdir -p "$out/Disks" "$out/docs/img"
@@ -390,12 +387,12 @@ jobs:
           if-no-files-found: error
 
       #
-      # Pre-releases only (a tag with a hyphen, v0.6.1-beta2) until the Mac build has been
-      # tried on a real Mac and reported on. A full release is Windows-only until then; the
-      # zip is still built and kept as this run's artifact either way.
+      # Every release, as a beta, and named so (Mz950-<version>-macOS-beta.zip): it is built and
+      # checked on GitHub's Macs, but nobody has tried it on a real one yet. Until 0.7.0 it went
+      # on pre-releases only. Every run keeps the zip as an artifact either way.
       #
       - name: Add it to the release
-        if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS-macOS.txt --clobber --repo "$GITHUB_REPOSITORY"

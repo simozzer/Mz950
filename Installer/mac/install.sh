@@ -4,7 +4,7 @@
 #
 # Run it through bash rather than double-clicking it:
 #
-#     bash ~/Downloads/Mz950-*-macOS/install.sh
+#     bash ~/Downloads/Mz950-*-macOS-beta/install.sh
 #
 # (type "bash ", drag this file into the Terminal window, press Return). Going through bash
 # is what lets it run at all: macOS refuses to open a downloaded script or plugin that has

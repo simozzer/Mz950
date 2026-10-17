@@ -1,11 +1,15 @@
-Mz950 for macOS
-===============
+Mz950 for macOS - BETA
+======================
 
 An emulator that plays back Akai S900/S950 disk images: a VST3, an Audio Unit
 (for Logic and GarageBand) and a standalone app. Free and open source (AGPLv3).
 Independent - not affiliated with Akai or inMusic.
 
 Runs on Apple Silicon and Intel Macs, macOS 11 or later.
+
+This is a beta. It's built on GitHub's Macs and passes Apple's own Audio Unit
+check, but nobody working on it has a Mac to try it on. If something doesn't
+work, please say so on https://github.com/simozzer/Mz950/issues
 
 
 INSTALLING - one command
