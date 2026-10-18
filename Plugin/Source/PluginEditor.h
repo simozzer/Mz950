@@ -272,6 +272,10 @@ private:
     juce::TextButton loadButton { "Load disk..." };
     juce::ComboBox   programs;
 
+    // This version, and where to find the next: the project's page, at the foot, beside the
+    // licence notice.
+    juce::HyperlinkButton projectLink;
+
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> gainAttachment;
 
     /*

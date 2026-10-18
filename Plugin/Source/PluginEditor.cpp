@@ -802,6 +802,20 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
     };
     addAndMakeVisible (programs);
 
+    //
+    // Where to come back to: the version this is, and the page the next one will be on.
+    // Nothing here checks for updates by itself - the plugin never goes online unasked. It
+    // takes no keyboard focus, or a host's space bar could open it rather than play.
+    //
+    projectLink.setButtonText ("v" JucePlugin_VersionString "  -  github.com/simozzer/Mz950");
+    projectLink.setURL (juce::URL ("https://github.com/simozzer/Mz950"));
+    projectLink.setFont (look::font (10.0f), false, juce::Justification::centredLeft);   // straight on from the notice
+    projectLink.setColour (juce::HyperlinkButton::textColourId, look::faint);
+    projectLink.setTooltip ("The project's page: the latest version and what's new in it, the source, "
+                            "and where to report a problem. Opens in your browser.");
+    projectLink.setWantsKeyboardFocus (false);
+    addAndMakeVisible (projectLink);
+
     // Whatever the processor is already holding - this editor may well not be the first.
     refreshPrograms();
 
@@ -1175,10 +1189,10 @@ void VirtualS950Editor::paint (juce::Graphics& g)
                 16, getHeight() - 22, getWidth() / 2, 16,
                 juce::Justification::centredLeft, true);
 
-    // The licence asks an interactive program to say so where it can be seen.
-    g.drawText (juce::CharPointer_UTF8 ("Copyright \xc2\xa9 2026 Simon Moscrop  -  AGPLv3, "
-                                        "no warranty  -  github.com/simozzer/Mz950"),
-                16, getHeight() - 22, getWidth() - 32, 16,
+    // The licence asks an interactive program to say so where it can be seen - and where the
+    // licence and the source are, which is the project's page, the link beside it.
+    g.drawText (juce::CharPointer_UTF8 ("\xc2\xa9 2026 Simon Moscrop  -  AGPLv3, no warranty  -  "),
+                16, getHeight() - 22, projectLink.getX() - 16, 16,
                 juce::Justification::centredRight, true);
 
     /*
@@ -1205,6 +1219,9 @@ void VirtualS950Editor::paint (juce::Graphics& g)
 
 void VirtualS950Editor::resized()
 {
+    // the foot: the project's link at the right, the licence notice painted to its left
+    projectLink.setBounds (getWidth() - 16 - 200, getHeight() - 22, 200, 16);
+
     auto r = getLocalBounds().reduced (16);
 
     /*
