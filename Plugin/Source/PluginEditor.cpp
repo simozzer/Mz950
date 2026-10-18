@@ -809,8 +809,9 @@ VirtualS950Editor::VirtualS950Editor (VirtualS950Processor& p)
     //
     projectLink.setButtonText ("v" JucePlugin_VersionString "  -  github.com/simozzer/Mz950");
     projectLink.setURL (juce::URL ("https://github.com/simozzer/Mz950"));
-    projectLink.setFont (look::font (10.0f), false, juce::Justification::centredLeft);   // straight on from the notice
-    projectLink.setColour (juce::HyperlinkButton::textColourId, look::faint);
+    projectLink.setFont (look::font (10.5f).withStyle (juce::Font::underlined), false,
+                         juce::Justification::centredLeft);   // straight on from the notice
+    projectLink.setColour (juce::HyperlinkButton::textColourId, juce::Colour (0xff6ab0ff));   // a link's blue
     projectLink.setTooltip ("The project's page: the latest version and what's new in it, the source, "
                             "and where to report a problem. Opens in your browser.");
     projectLink.setWantsKeyboardFocus (false);
@@ -1220,7 +1221,7 @@ void VirtualS950Editor::paint (juce::Graphics& g)
 void VirtualS950Editor::resized()
 {
     // the foot: the project's link at the right, the licence notice painted to its left
-    projectLink.setBounds (getWidth() - 16 - 200, getHeight() - 22, 200, 16);
+    projectLink.setBounds (getWidth() - 16 - 210, getHeight() - 22, 210, 16);
 
     auto r = getLocalBounds().reduced (16);
 
