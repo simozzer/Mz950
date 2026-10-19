@@ -6,6 +6,25 @@ Every number here came off a recording of a real S950 rather than out of a manua
 a change is a measurement it says what was measured and what it replaced. Where it is an
 assumption it says that too — those are the ones another afternoon with a recorder settles.
 
+## v0.8.0 — 2026-10-19
+
+The Linux version, as a beta.
+
+### Linux, in beta, on every release
+
+`Mz950-<version>-linux-x86_64-beta.tar.gz` is attached to every release: the VST3, an **LV2**
+for the hosts that load it best (Ardour, Carla, Qtractor, Zrythm), the standalone app and the
+sound library, for 64-bit x86 PCs on Ubuntu 22.04 or later, or another distribution as new.
+`bash install.sh` in the unpacked folder puts the plugins in `~/.vst3` and `~/.lv2` and the
+library in `~/.local/share/Mz950/Disks`, where Load disk... already looks on Linux, never over a
+disk you have edited. It's built and checked on GitHub's Ubuntu machines - the conformance
+check and the disk round-trip included - but not yet tried much in real Linux hosts. Mz950
+Studio stays Windows-only.
+
+A one-line fix came with it: `Cal.h` now includes `<iterator>` for `std::size`, which GCC needs.
+
+The sound and the plugin's IDs are unchanged from 0.7.0.
+
 ## v0.7.0 — 2026-10-18
 
 The Mac version, on every release, as a beta.

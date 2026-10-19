@@ -196,6 +196,18 @@ jobs:
           GitHub's Macs, but not yet tried on a real one.
           "@
 
+          # The Linux archive, a beta too (see the linux job).
+          $linuxNotes = @"
+          ### Linux (beta)
+
+          **Mz950-*-linux-x86_64-beta.tar.gz** has the VST3, an LV2 for Ardour, Carla and
+          Qtractor, the standalone app and the sound library, for 64-bit x86 PCs on Ubuntu
+          22.04 or later, or another distribution as new. Unpack it and run ``bash install.sh``
+          in it, as **READ ME FIRST.txt** inside explains - nothing needs a password. Mz950
+          Studio, the disk editor, is Windows-only. This is a beta: built and checked on
+          GitHub's Ubuntu machines, but not yet tried much in real Linux hosts.
+          "@
+
           $notes = @"
           Built from ``$env:GITHUB_SHA`` by GitHub Actions.
 
@@ -222,6 +234,8 @@ jobs:
           Each is optional, and the installer asks whether it is for everyone or just you.
 
           $macNotes
+
+          $linuxNotes
 
           ### Licence
 
@@ -396,3 +410,121 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS-macOS.txt --clobber --repo "$GITHUB_REPOSITORY"
+
+  # =============================================================================== Linux
+  #
+  # The plugin and the standalone for Linux, in a .tar.gz with an install script: VST3, an
+  # LV2 (what Ardour, Carla and Qtractor load best) and the app, for 64-bit x86, as a beta.
+  #
+  # Built on Ubuntu 22.04, the oldest the runners offer, so it runs on that and everything
+  # since: a program built against an older glibc runs on newer ones, not the other way
+  # round. Building the LV2 loads the plugin itself, to write its description, so a plugin
+  # that will not load does not get past the build.
+  #
+  # After the Windows job, as the Mac's is: that job writes the sound library and draws the
+  # icon, and on a tag it is the one that creates the release.
+  #
+  linux:
+    needs: build
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Take the library and the icon from the Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: Mz950-for-mac
+          path: .
+
+      # What JUCE needs on Linux: ALSA for sound, FreeType and Fontconfig for text, X11 and
+      # its extensions for the window. JACK, curl and WebKit are all off, as JUCE leaves them.
+      - name: The libraries JUCE builds against
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++ cmake ninja-build pkg-config \
+            libasound2-dev libfreetype-dev libfontconfig1-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev libxrandr-dev libxrender-dev
+
+      - name: Cache JUCE
+        id: juce-cache
+        uses: actions/cache@v4
+        with:
+          path: JUCE
+          key: juce-linux-${{ env.JUCE_VERSION }}
+
+      - name: Fetch JUCE
+        if: steps.juce-cache.outputs.cache-hit != 'true'
+        run: git clone --depth 1 --branch "$JUCE_VERSION" https://github.com/juce-framework/JUCE.git JUCE
+
+      - name: Configure the plugin
+        run: |
+          set -o pipefail
+          cmake -S Plugin -B Plugin/build -G Ninja -DJUCE_PATH="$PWD/JUCE" -DCMAKE_BUILD_TYPE=Release \
+                2>&1 | tee configure.log || {
+            grep -E "Error|error" configure.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          }
+
+      - name: Build the plugin
+        run: |
+          set -o pipefail
+          cmake --build Plugin/build --parallel 2>&1 | tee build.log || {
+            grep -E "error:|Error [0-9]" build.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          }
+
+      - name: Does the C++ still agree with the C#
+        run: ./Plugin/build/ConformanceCheck
+
+      - name: Does the disk writer round-trip the library
+        run: |
+          for disk in Installer/staging/Disks/*.hfe; do
+            printf '%-20s ' "$(basename "$disk")"
+            ./Plugin/build/DiskEditCheck "$disk" | tail -1
+          done
+
+      - name: Package
+        run: |
+          ver=$(sed -n 's/^project(VirtualS950 VERSION \([0-9.]*\).*/\1/p' Plugin/CMakeLists.txt)
+          name="Mz950-$ver-linux-x86_64-beta"
+          art=Plugin/build/VirtualS950_artefacts/Release
+          out="dist/$name"
+          mkdir -p "$out/Disks" "$out/docs/img"
+
+          cp -r "$art/VST3/Mz950.vst3"     "$out/"
+          cp -r "$art/LV2/Mz950.lv2"       "$out/"
+          cp    "$art/Standalone/Mz950"    "$out/"
+          find "$out" -name "*.so" -exec strip --strip-unneeded {} +
+          strip "$out/Mz950"
+          cp Installer/staging/Disks/*.hfe "$out/Disks/"
+          cp "Installer/linux/READ ME FIRST.txt" Installer/linux/install.sh "$out/"
+          chmod +x "$out/install.sh"
+          cp LICENSE CHANGELOG.md "$out/"
+          cp Plugin/README.md "$out/README-plugin.md"
+          cp docs/tutorial.html "$out/docs/"
+          cp docs/img/*.png "$out/docs/img/"
+
+          (cd dist && tar -czf "$name.tar.gz" "$name")
+          (cd dist && sha256sum "$name.tar.gz" | tee SHA256SUMS-linux.txt)
+          ls -l dist
+
+      - name: Keep the build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mz950-linux
+          path: |
+            dist/*.tar.gz
+            dist/SHA256SUMS-linux.txt
+          if-no-files-found: error
+
+      #
+      # Every release, as a beta, and named so (Mz950-<version>-linux-x86_64-beta.tar.gz), as
+      # the Mac zip is. Every run keeps the archive as an artifact either way.
+      #
+      - name: Add it to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS-linux.txt --clobber --repo "$GITHUB_REPOSITORY"

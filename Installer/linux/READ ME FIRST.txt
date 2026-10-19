@@ -1,0 +1,68 @@
+Mz950 for Linux - BETA
+======================
+
+An emulator that plays back Akai S900/S950 disk images: a VST3, an LV2 and a
+standalone app, with a sound library of seven disks. Free and open source
+(AGPLv3). Independent - not affiliated with Akai or inMusic.
+
+For 64-bit x86 PCs: Ubuntu 22.04 or later, or another distribution as new.
+
+This is a beta. It's built on GitHub's Ubuntu machines and passes the same
+checks as the Windows version, but hasn't been tried much in real Linux hosts.
+If something doesn't work, please say so on
+https://github.com/simozzer/Mz950/issues
+
+
+INSTALLING - one command
+------------------------
+
+In a terminal, in this folder:
+
+  bash install.sh
+
+It copies everything into place inside your own home folder, with no password
+needed. Then rescan plug-ins in your DAW.
+
+
+INSTALLING BY HAND, if you'd rather
+-----------------------------------
+
+  Mz950.vst3    ->  ~/.vst3     (Bitwig, Reaper, Ardour, Carla, ...)
+  Mz950.lv2     ->  ~/.lv2      (Ardour, Carla, Qtractor, Zrythm, ...)
+  Mz950         ->  ~/.local/bin   (the standalone app: run Mz950)
+  Disks/*.hfe   ->  ~/.local/share/Mz950/Disks
+
+Use whichever your host prefers; most load both. They're the same plugin.
+Load disk... opens on the Disks folder the first time.
+
+
+IF IT WON'T LOAD
+----------------
+
+It needs a few libraries most desktops already have. On Ubuntu or Debian:
+
+  sudo apt install libasound2 libfreetype6 libfontconfig1 libx11-6 libxi6 \
+                   libxext6 libxinerama1 libxrandr2 libxcursor1 libxrender1
+
+(On Ubuntu 24.04 and later, libasound2 is called libasound2t64.)
+
+The standalone app plays through ALSA, which PipeWire and PulseAudio both
+provide: pick the output under Options. Under WSL, which has no sound card,
+ALSA needs PulseAudio's plugin first:
+
+  sudo apt install libasound2-plugins
+  printf 'pcm.!default pulse\nctl.!default pulse\n' > ~/.asoundrc
+
+
+REMOVING IT
+-----------
+
+Delete what you copied. Nothing else is installed anywhere.
+
+
+MORE
+----
+
+README-plugin.md is the manual, and docs/tutorial.html a guided tour. The
+source, the Windows and Mac versions and every release:
+https://github.com/simozzer/Mz950

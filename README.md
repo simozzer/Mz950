@@ -69,6 +69,23 @@ It's a beta: built and checked on GitHub's Macs, including Apple's own Audio Uni
 but not yet tried on a real one. If something doesn't work, please
 [open an issue](https://github.com/simozzer/Mz950/issues).
 
+### Linux (beta)
+
+Download `Mz950-<version>-linux-x86_64-beta.tar.gz` from the
+[releases page](https://github.com/simozzer/Mz950/releases) and unpack it. It holds the VST3, an LV2, the standalone app and the sound library, for 64-bit x86 PCs on Ubuntu 22.04 or later, or another distribution as new.
+Install it with one command in the unpacked folder:
+
+    bash install.sh
+
+It copies the plugins into `~/.vst3` and `~/.lv2`, where Linux hosts (Ardour, Bitwig,
+Reaper, Carla, Qtractor, Zrythm) look for them, with no password needed. Then rescan plugins
+in your DAW. `READ ME FIRST.txt` in the archive explains how to install by hand, and the
+few libraries a minimal system might need.
+
+It's a beta: built and checked on GitHub's Ubuntu machines, but not yet tried much in real
+Linux hosts. If something doesn't work, please
+[open an issue](https://github.com/simozzer/Mz950/issues).
+
 ## The parts
 
 | | |

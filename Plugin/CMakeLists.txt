@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(VirtualS950 VERSION 0.7.0 LANGUAGES C CXX)
+project(VirtualS950 VERSION 0.8.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -62,6 +62,8 @@ set(ICON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../Icon")
 set(MZ950_FORMATS VST3 Standalone)
 if(APPLE)
     list(APPEND MZ950_FORMATS AU)
+elseif(UNIX)
+    list(APPEND MZ950_FORMATS LV2)   # what Linux hosts - Ardour, Carla, Qtractor - load best
 endif()
 
 # The icon PNGs come out of Icon\build-icon.ps1, which needs Windows. A build without them
@@ -93,6 +95,7 @@ juce_add_plugin(VirtualS950
     PRODUCT_NAME                "Mz950"
     PLUGIN_MANUFACTURER_CODE    Smoz          # never change - see above
     PLUGIN_CODE                 Ak95          # never change - see above
+    LV2URI                      "https://github.com/simozzer/Mz950"   # never change - an LV2's identity
 
     # Explicitly, because JUCE does NOT inherit it from project(). Without this the VST3
     # reported 0.1.0 - JUCE's own default - while the project said 0.3.0 and the installer
