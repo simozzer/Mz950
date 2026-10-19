@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <algorithm>
+#include <iterator>   // std::size
 
 /*
  * What the machine was measured to do.
