@@ -136,7 +136,7 @@ recorded and nothing is sampled. It has no window and no audio, it is not part o
 Studio and is not installed with it, and the only thing it shares is `AkaiS950List`,
 because it has to write the same format.
 
-Five of the eight disks are tuned sounds: a few cycles of a waveform, looped, with the
+Five of the twelve disks are tuned sounds: a few cycles of a waveform, looped, with the
 machine's envelope and filter making an instrument of them. The sixth, `DRUMS`, is not.
 A drum's envelope is the sound rather than a setting, so those samples are one-shots
 with the whole shape baked in — three kicks, three snares, three toms, closed, pedal and
@@ -157,6 +157,18 @@ wander of its own, a few cents off the others, and breath; the "aah" has air abo
 vowel too. Everything that moves comes round exactly in the sample's length, so the loops
 have no join. Four programmes: `VOICE OOHS`, `VOICE AAHS`, `CHOIR` (both at once) and
 `DARK OOHS`. `Choir.cs` has the model.
+
+The ninth to twelfth are orchestral, drawn the same way. `WOODWIND` is a flute, a piccolo
+and a recorder - a soft tone shaped by the bore, breath noise and a "tu" at the start - under
+`FLUTE`, `PICCOLO`, `RECORDER` and `SOFT FLUTE`. `BRASS` is a trumpet, a trombone, a tuba and
+a French horn, each a buzz that scoops up to the note, its upper harmonics arriving a moment
+late and brighter the harder it is played, under one programme each and `BRASS SECT`.
+`STRINGS` is a solo violin, viola and contrabass, bowed and pizzicato: a bowed string's
+sawtooth through a dense wooden body, with the bow's scrape and the hiss of the hair, and
+`STR TRIO` with all three. `ENSEMBLE` is the same as sections - eight violins, six violas, four basses, each player a few cents and a few
+milliseconds off the others - under `VIOLINS`, `VIOLAS`, `BASSES`, `STRINGS`, `SLOW STRS` and
+four pizzicato programmes. The sustained samples are an attack and a loop, the loop seamless
+like the choir's. `Winds.cs` and `Strings.cs` have the models.
 
 Drums are judged by ear or not at all, and a disk image cannot be played:
 

@@ -193,6 +193,16 @@ namespace AkaiS950Synth
             public Func<short[]> Looped;
 
             /// <summary>
+            /// A sample with an attack and a loop: rendered whole, played from the start, and
+            /// then round and round its last <c>Item2</c> words for as long as the key is held.
+            ///
+            /// For an instrument whose start is part of what it is - a flute's chiff, the blat
+            /// of a brass note - and whose steady tone can still be looped. The sound is built
+            /// to repeat exactly from where the loop begins, so the join is seamless.
+            /// </summary>
+            public Func<Tuple<short[], int>> Held;
+
+            /// <summary>
             /// The key it plays at its own rate on, where that is not middle C.
             ///
             /// Every tuned wave here is written at <see cref="RootNote"/> and transposed
@@ -430,7 +440,16 @@ namespace AkaiS950Synth
 
                 // The choir, alone for the same reason: twelve long samples, a whole
                 // second and a half of section singing in each.
-                Disk ("CHOIR", Choir.Programmes(), new List<Patch>())
+                Disk ("CHOIR", Choir.Programmes(), new List<Patch>()),
+
+                // The winds, a disk each: held notes with their attacks, multisampled, as the
+                // piano and the choir are - see Winds.
+                Disk ("WOODWIND", Woodwind.Programmes(), new List<Patch>()),
+                Disk ("BRASS", Brass.Programmes(), new List<Patch>()),
+
+                // The strings, soloists and sections, a disk each - see Strings.
+                Disk ("STRINGS", Strings.Programmes(), new List<Patch>()),
+                Disk ("ENSEMBLE", Strings.SectionProgrammes(), new List<Patch>())
             };
         }
 
@@ -631,6 +650,9 @@ namespace AkaiS950Synth
             waves.AddRange(Drums.Waves());
             waves.AddRange(Piano.Waves());
             waves.AddRange(Choir.Waves());
+            waves.AddRange(Woodwind.Waves());
+            waves.AddRange(Brass.Waves());
+            waves.AddRange(Strings.Waves());
 
             return waves;
         }

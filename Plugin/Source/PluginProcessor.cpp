@@ -1023,7 +1023,30 @@ bool VirtualS950Processor::loadDisk (const juce::File& file, juce::String& error
 
     diskPath  = file.getFullPathName();
     synthDisk = false;
+
+    // A render asked for before this disk was opened would land on top of it.
+    renderWanted  = false;
+    renderDropped = renderThread != nullptr;
+
+    resetPerformance();
     return true;
+}
+
+void VirtualS950Processor::resetPerformance()
+{
+    for (auto* p : getParameters())
+    {
+        auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p);
+        if (ranged == nullptr) continue;
+
+        const auto id = ranged->getParameterID();
+        if (id == "gain" || id == "bendRange") continue;
+
+        // Through the host, so an automation lane or a control surface follows.
+        ranged->beginChangeGesture();
+        ranged->setValueNotifyingHost (ranged->getDefaultValue());
+        ranged->endChangeGesture();
+    }
 }
 
 bool VirtualS950Processor::adoptDisk (std::unique_ptr<s950::Disk> opened, juce::String& error)
@@ -1366,6 +1389,13 @@ void VirtualS950Processor::finishRender()
     renderThread.reset();
 
     renderError = juce::String (renderFailure);
+
+    // A disk was opened while this ran: that is what was asked for last, so it stays.
+    if (renderDropped)
+    {
+        renderDropped = false;
+        rendered.reset();
+    }
 
     if (rendered != nullptr)
     {

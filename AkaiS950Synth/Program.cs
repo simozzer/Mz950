@@ -174,7 +174,7 @@ namespace AkaiS950Synth
 
             foreach (var w in Patches.Waves())
             {
-                if (w.Oneshot == null && w.Looped == null) continue;
+                if (w.Oneshot == null && w.Looped == null && w.Held == null) continue;
 
                 //
                 // A looped sample three times round, as the machine would play a held note,
@@ -182,6 +182,17 @@ namespace AkaiS950Synth
                 //
                 short[] words;
                 if (w.Oneshot != null) words = w.Oneshot();
+                else if (w.Held != null)
+                {
+                    // the attack, then the loop twice more - a note held for three loops
+                    var held = w.Held();
+                    var all = held.Item1;
+                    int loop = held.Item2;
+                    words = new short[all.Length + 2 * loop];
+                    all.CopyTo(words, 0);
+                    for (int r = 0; r < 2; r++)
+                        Array.Copy(all, all.Length - loop, words, all.Length + r * loop, loop);
+                }
                 else
                 {
                     var once = w.Looped();
@@ -228,6 +239,7 @@ namespace AkaiS950Synth
         {
             if (w.Oneshot != null) return w.Oneshot();
             if (w.Looped != null) return w.Looped();
+            if (w.Held != null) return w.Held().Item1;
             if (w.IsNoise) return Waveforms.Hiss(2000, 12345);
 
             int highest = Waveforms.HighestHarmonic(w.Rate, Patches.RootHz);
@@ -254,26 +266,38 @@ namespace AkaiS950Synth
 
             foreach (var w in waves)
             {
-                short[] words = Words(w);
-
                 //
                 // Looped, and the loop is the whole sample. AddSample defaults the length to
                 // 2000 words, which is right only for the short ones, so it is written out
                 // explicitly - a loop over part of a wavetable would sweep through half of
                 // it and jump back.
                 //
-                // A one-shot takes none of that: it is played once, to the end, and the
-                // loop fields are never read.
+                // A held sample loops only its tail, after the attack; a one-shot takes none
+                // of that: it is played once, to the end, and the loop fields are never read.
                 //
+                short[] words;
+                int loop;
+                if (w.Held != null)
+                {
+                    var held = w.Held();
+                    words = held.Item1;
+                    loop = held.Item2;
+                }
+                else
+                {
+                    words = Words(w);
+                    loop = words.Length;
+                }
+
                 bool once = w.Oneshot != null;
                 var e = disk.AddSample(w.Name, words, w.Rate,
                                        w.Root.HasValue ? w.Root.Value : Patches.RootNote,
                                        0, once ? 'O' : 'L');
-                if (!once) SetLoopLength(disk, e, words.Length);
+                if (!once) SetLoopLength(disk, e, loop);
 
                 Console.WriteLine("    wave  {0,-10} {1,6} words  {2,6} Hz{3}",
                                   w.Name, words.Length, w.Rate,
-                                  once ? "   one-shot" : "");
+                                  once ? "   one-shot" : loop < words.Length ? "   loop " + loop : "");
             }
 
             foreach (var p in bank.Programmes)

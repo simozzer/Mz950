@@ -6,6 +6,40 @@ Every number here came off a recording of a real S950 rather than out of a manua
 a change is a measurement it says what was measured and what it replaced. Where it is an
 assumption it says that too — those are the ones another afternoon with a recorder settles.
 
+## v0.10.0 — 2026-10-21
+
+Woodwind, brass and strings, as the sound library's ninth to twelfth disks; and a disk now
+loads with the Perform settings back where they start.
+
+### WOODWIND, BRASS, STRINGS and ENSEMBLE
+
+- `WOODWIND`: flute, piccolo and recorder - a soft tone shaped by the bore, with breath noise
+  and a "tu" at the start. `FLUTE`, `PICCOLO`, `RECORDER` and `SOFT FLUTE`.
+- `BRASS`: trumpet, trombone, tuba and French horn - a buzz that scoops up to the note, its
+  upper harmonics arriving a moment late. One programme each, and `BRASS SECT` (trumpet,
+  trombone and horn).
+- `STRINGS`: solo violin, viola and contrabass, bowed and pizzicato. The bowed ones go through
+  a dense wooden body with the bow's scrape and the hiss of the hair. `VIOLIN`, `VIOLA`,
+  `CONTRABASS`, `STR TRIO`, `VLN PIZZ`, `VLA PIZZ` and `CB PIZZ`.
+- `ENSEMBLE`: the same as sections - eight violins, six violas, four basses, each player a few
+  cents and a few milliseconds off the others. `VIOLINS`, `VIOLAS`, `BASSES`, `STRINGS`,
+  `SLOW STRS`, `PIZZ VLNS`, `PIZZ VLAS`, `PIZZ BASS` and `PIZZ ENSEM`.
+
+The sustained samples are an attack and a seamless loop. The generator writes a sample of
+that shape now as well as wavetables, one-shots and whole loops, and `--wav` auditions it.
+The other eight disks are byte for byte as they were.
+
+### Loading a disk
+
+- Every Perform setting goes back to its default when a disk is opened: the offsets to zero,
+  and resonance, glide, polyphony, Wide and the LFO's shape and sync back to their starts. An
+  offset dialled in for the last disk was carried onto the next and made it sound wrong.
+  Gain and bend range stay. A programme change, or a song being reopened, leaves them alone.
+- A Synth-tab render still running when a disk was opened could land afterwards and replace
+  that disk. Opening a disk now drops it.
+
+The plugin's IDs are unchanged from 0.9.0.
+
 ## v0.9.0 — 2026-10-21
 
 A choir, as the sound library's eighth disk.

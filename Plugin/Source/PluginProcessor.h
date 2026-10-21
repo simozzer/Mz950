@@ -108,8 +108,22 @@ public:
      * Message thread only. Decoding a disk allocates and takes long enough to matter, which
      * is exactly why the engine takes a finished patch rather than a disk: none of this can
      * happen anywhere near the audio thread.
+     *
+     * Every Perform setting goes back to where it starts - see resetPerformance - and a
+     * Synth-tab render still queued or running is dropped, so it cannot land afterwards and
+     * replace the disk just opened.
      */
     bool loadDisk (const juce::File& file, juce::String& error);
+
+    /*
+     * Every Perform setting to its default: the offsets to zero, and the additions - glide,
+     * wide, resonance, polyphony, the LFO's shape and sync - off or back to their starts.
+     *
+     * A new disk is a new instrument, and an offset dialled in for the last one is a guess
+     * about this one; carried across, it reads as the disk being wrong. Gain and bend range
+     * stay: they belong to the rig rather than to the sound.
+     */
+    void resetPerformance();
 
     /// The programmes on the disk that is open, in directory order.
     juce::StringArray getProgramNames() const;
@@ -267,6 +281,7 @@ private:
 
     std::unique_ptr<std::thread> renderThread;
     std::atomic<bool>            renderDone { false };
+    bool                         renderDropped = false;   // a disk was opened while it ran
     std::unique_ptr<s950::Disk>  rendered;
     std::string                  renderFailure;
     juce::String                 renderError;

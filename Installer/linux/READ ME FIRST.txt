@@ -2,7 +2,7 @@ Mz950 for Linux - BETA
 ======================
 
 An emulator that plays back Akai S900/S950 disk images: a VST3, an LV2 and a
-standalone app, with a sound library of eight disks. Free and open source
+standalone app, with a sound library of twelve disks. Free and open source
 (AGPLv3). Independent - not affiliated with Akai or inMusic.
 
 For 64-bit x86 PCs: Ubuntu 22.04 or later, or another distribution as new.
