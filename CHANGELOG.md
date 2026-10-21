@@ -6,6 +6,26 @@ Every number here came off a recording of a real S950 rather than out of a manua
 a change is a measurement it says what was measured and what it replaced. Where it is an
 assumption it says that too — those are the ones another afternoon with a recorder settles.
 
+## v0.9.0 — 2026-10-21
+
+A choir, as the sound library's eighth disk.
+
+### CHOIR
+
+`CHOIR.hfe` is a section singing "ooh" and "aah", drawn rather than recorded like the rest of
+the library: twelve looped samples from A1 to G4, each eight voices - a buzz from the vocal
+folds through the formants of the vowel, men's at the bottom and women's at the top - every
+one a few cents off the others, with a vibrato and a wander of its own. The "aah" has some air
+above the vowel. The loops have no join: everything that moves is made to come round exactly
+in the sample's length. Four programmes - `VOICE OOHS`, `VOICE AAHS`, `CHOIR` with both, and
+`DARK OOHS` - swell in on the machine's envelope, and all twelve samples fit a stock S950's
+memory together. The other seven disks are byte for byte as they were.
+
+The generator writes a looped sample rendered whole as well as wavetables and one-shots now,
+and `--wav` writes those too, three times round so the loop can be heard.
+
+The sound of everything else, and the plugin's IDs, are unchanged from 0.8.0.
+
 ## v0.8.0 — 2026-10-19
 
 The Linux version, as a beta.

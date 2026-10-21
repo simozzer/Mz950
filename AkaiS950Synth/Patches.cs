@@ -183,6 +183,16 @@ namespace AkaiS950Synth
             public Func<short[]> Oneshot;
 
             /// <summary>
+            /// A sample rendered whole and looped whole, instead of a table of cycles.
+            ///
+            /// For a sound that moves too much to be a few cycles round and round - a choir,
+            /// whose singers drift through each other - but must still sustain. It is
+            /// written with the loop over the entire sample, like a wavetable, and so it is
+            /// built to join its own start without a seam.
+            /// </summary>
+            public Func<short[]> Looped;
+
+            /// <summary>
             /// The key it plays at its own rate on, where that is not middle C.
             ///
             /// Every tuned wave here is written at <see cref="RootNote"/> and transposed
@@ -416,7 +426,11 @@ namespace AkaiS950Synth
 
                 // The piano, alone for the same reason as the drums: a multisample of long
                 // one-shots fills a disk, and the machine's memory, by itself.
-                Disk ("PIANO", Piano.Programmes(), new List<Patch>())
+                Disk ("PIANO", Piano.Programmes(), new List<Patch>()),
+
+                // The choir, alone for the same reason: twelve long samples, a whole
+                // second and a half of section singing in each.
+                Disk ("CHOIR", Choir.Programmes(), new List<Patch>())
             };
         }
 
@@ -616,6 +630,7 @@ namespace AkaiS950Synth
             // The drum kit, which is generated a different way and says so - see Drums.
             waves.AddRange(Drums.Waves());
             waves.AddRange(Piano.Waves());
+            waves.AddRange(Choir.Waves());
 
             return waves;
         }

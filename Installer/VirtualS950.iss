@@ -27,7 +27,7 @@
 ; in [InstallDelete] and [Registry] below.
 
 #define AppName        "Mz950"
-#define AppVersion     "0.8.0"
+#define AppVersion     "0.9.0"
 #define AppPublisher   "Simon Moscrop"
 #define AppCopyright   "Created by Simon Moscrop"
 #define AppURL         "https://github.com/simozzer/Mz950"
@@ -94,7 +94,7 @@ Name: "custom"; Description: "Choose what to install"; Flags: iscustom
 Name: "studio";     Description: "Mz950 Studio - open, edit and save S900/S950 disk images"; Types: full custom; Flags: checkablealone
 Name: "vst3";       Description: "VST3 plugin - play disks in a DAW";                          Types: full custom; Flags: checkablealone
 Name: "standalone"; Description: "Standalone player - the plugin without a DAW";               Types: full custom; Flags: checkablealone
-Name: "sounds";     Description: "Sound library - seven disks of synthesised sounds, piano included"; Types: full custom; Flags: checkablealone
+Name: "sounds";     Description: "Sound library - eight disks of synthesised sounds, piano and choir included"; Types: full custom; Flags: checkablealone
 
 [InstallDelete]
 ;

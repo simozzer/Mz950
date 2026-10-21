@@ -136,7 +136,7 @@ recorded and nothing is sampled. It has no window and no audio, it is not part o
 Studio and is not installed with it, and the only thing it shares is `AkaiS950List`,
 because it has to write the same format.
 
-Five of the seven disks are tuned sounds: a few cycles of a waveform, looped, with the
+Five of the eight disks are tuned sounds: a few cycles of a waveform, looped, with the
 machine's envelope and filter making an instrument of them. The sixth, `DRUMS`, is not.
 A drum's envelope is the sound rather than a setting, so those samples are one-shots
 with the whole shape baked in — three kicks, three snares, three toms, closed, pedal and
@@ -148,6 +148,15 @@ from E1 to G5, each a sum of a struck string's partials — stretched by the str
 stiffness, shaped by the strike point, dying two-stage and beating across a two- or
 three-string unison — under four programmes (`GRAND PNO`, `BRIGHT PNO`, `MELLOW PNO`,
 `HONKYTONK`). It fits a stock S950's memory. `Piano.cs` has the model.
+
+The eighth, `CHOIR`, is a section singing "ooh" and "aah": twelve samples from A1 to G4,
+each a second and a half of eight voices looped whole, with the machine's envelope swelling
+them in. Each voice is a buzz through the formants of its vowel - a man's at the bottom, a
+woman's at the top, a soprano's first formant lifted to her note - with a vibrato and a
+wander of its own, a few cents off the others, and breath; the "aah" has air above the
+vowel too. Everything that moves comes round exactly in the sample's length, so the loops
+have no join. Four programmes: `VOICE OOHS`, `VOICE AAHS`, `CHOIR` (both at once) and
+`DARK OOHS`. `Choir.cs` has the model.
 
 Drums are judged by ear or not at all, and a disk image cannot be played:
 

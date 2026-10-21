@@ -159,7 +159,7 @@ namespace AkaiS950Synth
         /// Every one-shot as a WAV, to listen to.
         ///
         /// A disk image cannot be played, and a drum is judged by ear or not at all - no
-        /// checksum says a kick is thin or a hat is airy. The looped waves are left out:
+        /// checksum says a kick is thin or a hat is airy, and a choir by ear too. The wavetables are left out:
         /// they are eight cycles of a waveform and there is nothing to hear in one that
         /// the machine's envelope is not going to decide.
         ///
@@ -174,9 +174,20 @@ namespace AkaiS950Synth
 
             foreach (var w in Patches.Waves())
             {
-                if (w.Oneshot == null) continue;
+                if (w.Oneshot == null && w.Looped == null) continue;
 
-                var words = w.Oneshot();
+                //
+                // A looped sample three times round, as the machine would play a held note,
+                // so the join can be heard - or, as it should be, not heard.
+                //
+                short[] words;
+                if (w.Oneshot != null) words = w.Oneshot();
+                else
+                {
+                    var once = w.Looped();
+                    words = new short[once.Length * 3];
+                    for (int r = 0; r < 3; r++) once.CopyTo(words, r * once.Length);
+                }
                 string path = Path.Combine(folder, w.Name.Replace(' ', '-').ToLowerInvariant() + ".wav");
                 WriteWav(path, words, w.Rate);
 
@@ -216,6 +227,7 @@ namespace AkaiS950Synth
         static short[] Words(Patches.Wave w)
         {
             if (w.Oneshot != null) return w.Oneshot();
+            if (w.Looped != null) return w.Looped();
             if (w.IsNoise) return Waveforms.Hiss(2000, 12345);
 
             int highest = Waveforms.HighestHarmonic(w.Rate, Patches.RootHz);
