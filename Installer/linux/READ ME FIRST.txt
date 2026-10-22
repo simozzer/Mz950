@@ -5,7 +5,9 @@ An emulator that plays back Akai S900/S950 disk images: a VST3, an LV2 and a
 standalone app, with a sound library of twelve disks. Free and open source
 (AGPLv3). Independent - not affiliated with Akai or inMusic.
 
-For 64-bit x86 PCs: Ubuntu 22.04 or later, or another distribution as new.
+For 64-bit x86 PCs (the x86_64 download): Ubuntu 22.04 or later, or another
+distribution as new. For the Raspberry Pi 5 (the arm64 download): 64-bit
+Raspberry Pi OS Bookworm or later.
 
 This is a beta. It's built on GitHub's Ubuntu machines and passes the same
 checks as the Windows version, but hasn't been tried much in real Linux hosts.

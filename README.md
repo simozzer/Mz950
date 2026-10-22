@@ -72,7 +72,8 @@ but not yet tried on a real one. If something doesn't work, please
 ### Linux (beta)
 
 Download `Mz950-<version>-linux-x86_64-beta.tar.gz` from the
-[releases page](https://github.com/simozzer/Mz950/releases) and unpack it. It holds the VST3, an LV2, the standalone app and the sound library, for 64-bit x86 PCs on Ubuntu 22.04 or later, or another distribution as new.
+[releases page](https://github.com/simozzer/Mz950/releases) and unpack it. It holds the VST3, an LV2, the standalone app and the sound library, for 64-bit x86 PCs on Ubuntu 22.04 or later, or another distribution as new. For a **Raspberry Pi 5** on 64-bit Raspberry Pi OS (Bookworm or
+later), download `Mz950-<version>-linux-arm64-beta.tar.gz` instead; it installs the same way.
 Install it with one command in the unpacked folder:
 
     bash install.sh

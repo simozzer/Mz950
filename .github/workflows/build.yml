@@ -206,6 +206,9 @@ jobs:
           in it, as **READ ME FIRST.txt** inside explains - nothing needs a password. Mz950
           Studio, the disk editor, is Windows-only. This is a beta: built and checked on
           GitHub's Ubuntu machines, but not yet tried much in real Linux hosts.
+
+          **Mz950-*-linux-arm64-beta.tar.gz** is the same for the Raspberry Pi 5, on 64-bit
+          Raspberry Pi OS (Bookworm or later), and other 64-bit ARM boards.
           "@
 
           $notes = @"
@@ -426,7 +429,15 @@ jobs:
   #
   linux:
     needs: build
-    runs-on: ubuntu-22.04
+    # x86_64 for PCs, and arm64 for the Raspberry Pi 5 (64-bit Raspberry Pi OS) and other ARM
+    # boards - each built natively, on a runner of its own kind.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-22.04,     arch: x86_64, sums: SHA256SUMS-linux.txt }
+          - { runner: ubuntu-22.04-arm, arch: arm64,  sums: SHA256SUMS-linux-arm64.txt }
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - uses: actions/checkout@v4
@@ -488,7 +499,7 @@ jobs:
       - name: Package
         run: |
           ver=$(sed -n 's/^project(VirtualS950 VERSION \([0-9.]*\).*/\1/p' Plugin/CMakeLists.txt)
-          name="Mz950-$ver-linux-x86_64-beta"
+          name="Mz950-$ver-linux-${{ matrix.arch }}-beta"
           art=Plugin/build/VirtualS950_artefacts/Release
           out="dist/$name"
           mkdir -p "$out/Disks" "$out/docs/img"
@@ -507,16 +518,16 @@ jobs:
           cp docs/img/*.png "$out/docs/img/"
 
           (cd dist && tar -czf "$name.tar.gz" "$name")
-          (cd dist && sha256sum "$name.tar.gz" | tee SHA256SUMS-linux.txt)
+          (cd dist && sha256sum "$name.tar.gz" | tee ${{ matrix.sums }})
           ls -l dist
 
       - name: Keep the build
         uses: actions/upload-artifact@v4
         with:
-          name: Mz950-linux
+          name: Mz950-linux-${{ matrix.arch }}
           path: |
             dist/*.tar.gz
-            dist/SHA256SUMS-linux.txt
+            dist/${{ matrix.sums }}
           if-no-files-found: error
 
       #
@@ -527,4 +538,4 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS-linux.txt --clobber --repo "$GITHUB_REPOSITORY"
+        run: gh release upload "$GITHUB_REF_NAME" dist/*.tar.gz "dist/${{ matrix.sums }}" --clobber --repo "$GITHUB_REPOSITORY"
