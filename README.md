@@ -137,7 +137,7 @@ recorded and nothing is sampled. It has no window and no audio, it is not part o
 Studio and is not installed with it, and the only thing it shares is `AkaiS950List`,
 because it has to write the same format.
 
-Five of the twelve disks are tuned sounds: a few cycles of a waveform, looped, with the
+Five of the thirteen disks are tuned sounds: a few cycles of a waveform, looped, with the
 machine's envelope and filter making an instrument of them. The sixth, `DRUMS`, is not.
 A drum's envelope is the sound rather than a setting, so those samples are one-shots
 with the whole shape baked in — three kicks, three snares, three toms, closed, pedal and
@@ -170,6 +170,15 @@ sawtooth through a dense wooden body, with the bow's scrape and the hiss of the 
 milliseconds off the others - under `VIOLINS`, `VIOLAS`, `BASSES`, `STRINGS`, `SLOW STRS` and
 four pizzicato programmes. The sustained samples are an attack and a loop, the loop seamless
 like the choir's. `Winds.cs` and `Strings.cs` have the models.
+
+The thirteenth, `BIRDS`, is birdsong: twelve calls, one-shots at 22,050 Hz, drawn from how
+birds sing. A songbird's syrinx makes a nearly pure tone swept faster than any instrument, so
+the robin, blackbird, canary, sparrow, wren and swallow are whistles along drawn paths - warbles,
+trills, cheeps and twitters. The cuckoo, owl and dove hoot low and soft; the crow and gull are
+harsh voices through a resonance, roughened with noise; the woodpecker drums. `SONGBIRDS` and
+`BIRDS` give each bird an octave of the keyboard, C1 to B6, at its own pitch on the bottom key;
+`AVIARY` has all twelve on a key each from C3; `DAWN SONG` is them all at once, near and far.
+`Birds.cs` has the recipes.
 
 Drums are judged by ear or not at all, and a disk image cannot be played:
 

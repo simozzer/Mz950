@@ -449,7 +449,10 @@ namespace AkaiS950Synth
 
                 // The strings, soloists and sections, a disk each - see Strings.
                 Disk ("STRINGS", Strings.Programmes(), new List<Patch>()),
-                Disk ("ENSEMBLE", Strings.SectionProgrammes(), new List<Patch>())
+                Disk ("ENSEMBLE", Strings.SectionProgrammes(), new List<Patch>()),
+
+                // The birds: one-shot calls, an octave of the keyboard each - see Birds.
+                Disk ("BIRDS", Birds.Programmes(), new List<Patch>())
             };
         }
 
@@ -653,6 +656,7 @@ namespace AkaiS950Synth
             waves.AddRange(Woodwind.Waves());
             waves.AddRange(Brass.Waves());
             waves.AddRange(Strings.Waves());
+            waves.AddRange(Birds.Waves());
 
             return waves;
         }

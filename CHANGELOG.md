@@ -6,6 +6,37 @@ Every number here came off a recording of a real S950 rather than out of a manua
 a change is a measurement it says what was measured and what it replaced. Where it is an
 assumption it says that too — those are the ones another afternoon with a recorder settles.
 
+## v0.11.0 — 2026-10-23
+
+Birdsong, as the sound library's thirteenth disk; and a build for the Raspberry Pi 5.
+
+### BIRDS
+
+`BIRDS.hfe` is twelve bird calls, drawn rather than recorded, as one-shots at 22,050 Hz:
+
+- Robin, blackbird, canary, sparrow, wren and swallow are songbirds. Each is a nearly pure
+  whistle along a drawn path, as a syrinx sings: warbles, trills, cheeps and twitters.
+- Cuckoo, owl and dove hoot, low and soft.
+- Crow and gull are harsh voices through a resonance, roughened with noise.
+- Woodpecker drums.
+
+Four programmes:
+
+- `SONGBIRDS` and `BIRDS` give each bird an octave of the keyboard, C1 to B6, at its own pitch
+  on the bottom key.
+- `AVIARY` has all twelve on a key each from C3, at their own pitch.
+- `DAWN SONG` is four and a half seconds of them singing together, near and far.
+
+The other twelve disks are byte for byte as they were.
+
+### Raspberry Pi 5
+
+Every release now has `Mz950-<version>-linux-arm64-beta.tar.gz` beside the x86_64 one, for the
+Raspberry Pi 5 on 64-bit Raspberry Pi OS (Bookworm or later), built natively on GitHub's ARM
+machines.
+
+The sound of everything else, and the plugin's IDs, are unchanged from 0.10.0.
+
 ## v0.10.0 — 2026-10-21
 
 Woodwind, brass and strings, as the sound library's ninth to twelfth disks; and a disk now
