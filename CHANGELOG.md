@@ -6,6 +6,15 @@ Every number here came off a recording of a real S950 rather than out of a manua
 a change is a measurement it says what was measured and what it replaced. Where it is an
 assumption it says that too — those are the ones another afternoon with a recorder settles.
 
+## v0.12.1 — 2026-10-24
+
+`WHALE SEA`'s sea moved into the keyboard, for MzDebirth's ambient demo.
+
+In 0.12.0 the sea sat on the octave below the whales, C-1 to B-1 - under C0, where the S950's
+keyboard starts. It is now on the eight keys above them, C8 to G8, its own pitch on G8, and
+6 dB down, a bed under the whales rather than a wave over them. The other programmes, and the
+other fourteen disks, are as they were.
+
 ## v0.12.0 — 2026-10-23
 
 Real birds in place of drawn ones, and two disks for ambient music and sleep: the sea and whales.
@@ -37,7 +46,7 @@ Four programmes:
 - `WHALES` gives each call an octave from C0, at its own pitch on the top key.
 - `SLOW WHALE` is the same keyboard, softened, swelling in and fading slowly.
 - `WHALE SEA` is the whales with `OCEAN`'s sea on the octave below them, from C-1, so one disk
-  plays both - as MzDebirth's ambient demo does.
+  plays both.
 - `POD` has them on a key each from C3.
 
 The other twelve disks are byte for byte as they were.

@@ -190,7 +190,7 @@ Bay, Alaska, and a blue whale, a fin whale, a minke whale and sperm whale clicks
 blue and fin whales were sped up by NOAA so they can be heard. `WHALES` gives each call an
 octave of the keyboard from C0, at its own pitch on the top key and deeper below it. `SLOW WHALE`
 is the same keyboard swelling in and fading slowly, to hold under other sounds. `WHALE SEA` adds
-`OCEAN`'s sea on the octave below the whales, from C-1, so one disk plays both. `POD` puts
+`OCEAN`'s sea on the eight keys above the whales, C8 to G8, so one disk plays both. `POD` puts
 them on a key each from C3, as a kit. `Whales.cs` lists each source.
 
 Drums are judged by ear or not at all, and a disk image cannot be played:

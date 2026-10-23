@@ -37,9 +37,9 @@ namespace AkaiS950Synth
     ///
     /// THE PROGRAMMES. WHALES gives each call an octave of the keyboard, from C0, playing at
     /// its own pitch on the top key and an octave deeper at the bottom: whales are better
-    /// slowed than hurried. SLOW WHALES is the same keyboard swelling in and dying away
+    /// slowed than hurried. SLOW WHALE is the same keyboard swelling in and dying away
     /// slowly, softened, to hold under ambient music. WHALE SEA adds the sea from the OCEAN
-    /// disk on the octave below them, C-1 to B-1, so a song can have both from one disk. POD
+    /// disk on the eight keys above them, C8 to G8, so a song can have both from one disk. POD
     /// has them on a key each from C3, at their own pitch, as a kit.
     /// </summary>
     internal static class Whales
@@ -96,9 +96,8 @@ namespace AkaiS950Synth
                 });
             }
 
-            // the sea from the OCEAN disk, under the whales, its own pitch on the top key of the
-            // octave below theirs
-            outp.Add(new Patches.Wave { Name = "SEA", Rate = 16000, Root = 23, Looped = () => Ocean.Sea() });
+            // the sea from the OCEAN disk, for WHALE SEA's top keys, its own pitch on the top one
+            outp.Add(new Patches.Wave { Name = "SEA", Rate = 16000, Root = 127, Looped = () => Ocean.Sea() });
             return outp;
         }
 
@@ -129,8 +128,8 @@ namespace AkaiS950Synth
                     Layers = octaves.ToArray()
                 },
 
-                // the whales over the sea: the same keyboard, and the sea on the octave below it,
-                // to hold - for a song that wants both from one disk
+                // the whales and the sea: the same keyboard, and the sea on the keys above it, to
+                // hold - for a song that wants both from one disk
                 new Patch
                 {
                     Name = "WHALE SEA", A = 30, D = 99, S = 99, R = 65,
@@ -147,10 +146,13 @@ namespace AkaiS950Synth
             };
         }
 
+        // Eight octaves of whales fill C0 to B7; the sea goes on the eight keys above, C8 to G8,
+        // the top of the S950's keyboard - and 6 dB down, a bed under them rather than a wave
+        // over them.
         static Layer[] WithSea(List<Layer> octaves)
         {
             var layers = new List<Layer>(octaves);
-            layers.Add(new Layer { Sample = "SEA", LowKey = 12, HighKey = 23 });
+            layers.Add(new Layer { Sample = "SEA", LowKey = 120, HighKey = 127, Loudness = -15 });
             return layers.ToArray();
         }
     }
