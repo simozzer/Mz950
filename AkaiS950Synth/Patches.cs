@@ -451,8 +451,14 @@ namespace AkaiS950Synth
                 Disk ("STRINGS", Strings.Programmes(), new List<Patch>()),
                 Disk ("ENSEMBLE", Strings.SectionProgrammes(), new List<Patch>()),
 
-                // The birds: one-shot calls, an octave of the keyboard each - see Birds.
-                Disk ("BIRDS", Birds.Programmes(), new List<Patch>())
+                // The birds: five recorded calls, an octave of the keyboard each - see Birds.
+                Disk ("BIRDS", Birds.Programmes(), new List<Patch>()),
+
+                // The sea, looped, to hold for ambient music and sleep - see Ocean.
+                Disk ("OCEAN", Ocean.Programmes(), new List<Patch>()),
+
+                // The whales: eight recorded calls, public domain, an octave each - see Whales.
+                Disk ("WHALES", Whales.Programmes(), new List<Patch>())
             };
         }
 
@@ -657,6 +663,8 @@ namespace AkaiS950Synth
             waves.AddRange(Brass.Waves());
             waves.AddRange(Strings.Waves());
             waves.AddRange(Birds.Waves());
+            waves.AddRange(Ocean.Waves());
+            waves.AddRange(Whales.Waves());
 
             return waves;
         }

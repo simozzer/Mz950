@@ -137,7 +137,7 @@ recorded and nothing is sampled. It has no window and no audio, it is not part o
 Studio and is not installed with it, and the only thing it shares is `AkaiS950List`,
 because it has to write the same format.
 
-Five of the thirteen disks are tuned sounds: a few cycles of a waveform, looped, with the
+Five of the fifteen disks are tuned sounds: a few cycles of a waveform, looped, with the
 machine's envelope and filter making an instrument of them. The sixth, `DRUMS`, is not.
 A drum's envelope is the sound rather than a setting, so those samples are one-shots
 with the whole shape baked in — three kicks, three snares, three toms, closed, pedal and
@@ -171,14 +171,27 @@ milliseconds off the others - under `VIOLINS`, `VIOLAS`, `BASSES`, `STRINGS`, `S
 four pizzicato programmes. The sustained samples are an attack and a loop, the loop seamless
 like the choir's. `Winds.cs` and `Strings.cs` have the models.
 
-The thirteenth, `BIRDS`, is birdsong: twelve calls, one-shots at 22,050 Hz, drawn from how
-birds sing. A songbird's syrinx makes a nearly pure tone swept faster than any instrument, so
-the robin, blackbird, canary, sparrow, wren and swallow are whistles along drawn paths - warbles,
-trills, cheeps and twitters. The cuckoo, owl and dove hoot low and soft; the crow and gull are
-harsh voices through a resonance, roughened with noise; the woodpecker drums. `SONGBIRDS` and
-`BIRDS` give each bird an octave of the keyboard, C1 to B6, at its own pitch on the bottom key;
-`AVIARY` has all twelve on a key each from C3; `DAWN SONG` is them all at once, near and far.
-`Birds.cs` has the recipes.
+The thirteenth, `BIRDS`, is one of two disks here that are recorded rather than drawn. It has five
+short bird calls from Simon Moscrop's own recordings, copyright-free. They're kept exactly as
+he sampled them, as twelve-bit words at 22,050 Hz, carried in `Birds.cs` so that every build
+makes the same disk. `BIRDS` gives each call an octave of the keyboard from C1, at its own
+pitch on the bottom key. `AVIARY` puts them on a key each from C3, as a kit.
+
+The fourteenth, `OCEAN`, is the sea from under the water, for ambient music and for sleep.
+It's four seconds of low, rolling underwater noise with a slow swell, looped so a held key
+lasts as long as anyone wants. Its loop is crossfaded into its own start, so the waves never
+show a seam. `OCEAN BED` plays it on every key, fading in and out over seconds. `DEEP SEA`
+plays it as a pitch, so lower keys give a deeper, slower sea. `Ocean.cs` has the recipe.
+
+The fifteenth, `WHALES`, is the other recorded disk, also for ambient music and sleep. Its eight
+short calls are all public domain, recorded by US government agencies and published on Wikimedia
+Commons: humpback calls, a humpback blow and an orca from the National Park Service in Glacier
+Bay, Alaska, and a blue whale, a fin whale, a minke whale and sperm whale clicks from NOAA. The
+blue and fin whales were sped up by NOAA so they can be heard. `WHALES` gives each call an
+octave of the keyboard from C0, at its own pitch on the top key and deeper below it. `SLOW WHALE`
+is the same keyboard swelling in and fading slowly, to hold under other sounds. `WHALE SEA` adds
+`OCEAN`'s sea on the octave below the whales, from C-1, so one disk plays both. `POD` puts
+them on a key each from C3, as a kit. `Whales.cs` lists each source.
 
 Drums are judged by ear or not at all, and a disk image cannot be played:
 

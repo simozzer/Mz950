@@ -6,6 +6,42 @@ Every number here came off a recording of a real S950 rather than out of a manua
 a change is a measurement it says what was measured and what it replaced. Where it is an
 assumption it says that too — those are the ones another afternoon with a recorder settles.
 
+## v0.12.0 — 2026-10-23
+
+Real birds in place of drawn ones, and two disks for ambient music and sleep: the sea and whales.
+
+### BIRDS, recorded
+
+`BIRDS.hfe` is now five short bird calls from Simon Moscrop's own recordings, copyright-free,
+in place of the twelve drawn birds of v0.11.0. They're kept word for word as he sampled them,
+twelve-bit at 22,050 Hz, and none is longer than a second and a half. `BIRDS` gives each call
+an octave of the keyboard from C1; `AVIARY` has them on a key each from C3.
+
+### OCEAN
+
+`OCEAN.hfe`, the fourteenth disk, is four seconds of the sea from under the water, looped
+seamlessly with a slow swell. `OCEAN BED` plays it on every key, fading in and out slowly;
+`DEEP SEA` plays it as a pitch.
+
+### WHALES
+
+`WHALES.hfe`, the fifteenth disk, is eight short whale calls, all public domain, from US
+government recordings on Wikimedia Commons:
+
+- National Park Service, Glacier Bay: two humpback calls, a humpback's blow, an orca.
+- NOAA: a blue whale and a fin whale, both sped up by NOAA so they can be heard; a minke
+  whale; sperm whale clicks.
+
+Four programmes:
+
+- `WHALES` gives each call an octave from C0, at its own pitch on the top key.
+- `SLOW WHALE` is the same keyboard, softened, swelling in and fading slowly.
+- `WHALE SEA` is the whales with `OCEAN`'s sea on the octave below them, from C-1, so one disk
+  plays both - as MzDebirth's ambient demo does.
+- `POD` has them on a key each from C3.
+
+The other twelve disks are byte for byte as they were.
+
 ## v0.11.0 — 2026-10-23
 
 Birdsong, as the sound library's thirteenth disk; and a build for the Raspberry Pi 5.
