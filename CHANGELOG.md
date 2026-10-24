@@ -6,6 +6,16 @@ Every number here came off a recording of a real S950 rather than out of a manua
 a change is a measurement it says what was measured and what it replaced. Where it is an
 assumption it says that too — those are the ones another afternoon with a recorder settles.
 
+## v0.12.2 — 2026-10-24
+
+The whales without the clicks.
+
+Some of the recordings on `WHALES.hfe` crackled: short sharp clicks in the blue whale's call
+above all, a few in the fin whale's, the orca's and the blow. The calls are de-clicked now,
+and the blue, fin and minke whales - low calls, all three - are lowpassed at 1.5 kHz, above
+anything of the whale. The sperm whale is left as it was recorded: its clicks are the call.
+The programmes, and the other fourteen disks, are as they were.
+
 ## v0.12.1 — 2026-10-24
 
 `WHALE SEA`'s sea moved into the keyboard, for MzDebirth's ambient demo.

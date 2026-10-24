@@ -27,7 +27,7 @@
 ; in [InstallDelete] and [Registry] below.
 
 #define AppName        "Mz950"
-#define AppVersion     "0.12.1"
+#define AppVersion     "0.12.2"
 #define AppPublisher   "Simon Moscrop"
 #define AppCopyright   "Created by Simon Moscrop"
 #define AppURL         "https://github.com/simozzer/Mz950"
